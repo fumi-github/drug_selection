@@ -1,0 +1,1 @@
+for i in {1..22}; do cat "C03.chr${i}.C03.glm.logistic"; done | perl -ne 'chomp; @a=split; if($.==1){print "$_\tA0\n"}else{if($a[6] eq "ADD"){if($a[5] ne $a[3]){push @a,$a[3]}else{push @a,$a[4]}; print join("\t", @a),"\n"}}' | gzip -c > plink_hypertensiondrug_onlyaffectedDBPge100SBPge160.C03.txt.gz
