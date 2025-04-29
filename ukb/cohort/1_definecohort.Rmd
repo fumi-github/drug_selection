@@ -1,0 +1,770 @@
+---
+title: "Define cohort"
+output: html_notebook
+date: "`r format(Sys.time(), '%d %B %Y')`"
+---
+
+```{r}
+library(tidyverse)
+# library(pscl)
+```
+
+# Utility functions
+
+```{r}
+average_measurements_in_instance =
+  function(data, s) {
+    clist = grep(pattern = s, colnames(data))
+    rowMeans(
+      data[, clist],
+      na.rm = TRUE)
+  }
+
+winsorize = function (x) {
+  xmax = quantile(x, 0.99, na.rm = TRUE)
+  xmin = quantile(x, 0.01, na.rm = TRUE)
+  x[!is.na(x) & x > xmax] = xmax
+  x[!is.na(x) & x < xmin] = xmin
+  return(x)
+}
+```
+
+# Load UKB dataset; other than drug
+
+```{r}
+filename = "ukb_subset.wo20003.REPLACE.tsv.gz"
+ukb_ss = as.data.frame(data.table::fread(filename, na.strings=c("", "NA")))
+
+fields_to_extract = read.table("Data-Field.wo20003.txt", header = FALSE)[, 1]
+fields_extracted = colnames(ukb_ss)
+setdiff(as.character(fields_to_extract), fields_extracted) # missed fields
+```
+
+Rename column names for backward compatibility.
+
+```{r}
+data = read.csv("app55469_20231218174731.dataset.data_dictionary.csv", header = TRUE)
+all(colnames(ukb_ss) %in% data$name)
+
+data$name2 = gsub("[a-z]", "", data$name, perl = TRUE)
+
+data$title2 = sub(" \\| Instance.*", "", data$title)
+data$title2 = gsub(" ", "_", data$title2)
+data$title2 = gsub(",", "", data$title2)
+data$title2 = gsub("\\(", "", data$title2)
+data$title2 = gsub("\\)", "", data$title2)
+data$title2 = gsub("-", "", data$title2)
+data$title2 = tolower(data$title2)
+
+data$nameold = paste0(data$title2, "_f", data$name2)
+data$nameold[1] = "eid"
+
+colnames(ukb_ss) = data$nameold[match(colnames(ukb_ss), data$name)]
+
+rm(data)
+```
+
+# Load UKB dataset; drug in field 20003
+
+data-coding 4 (for 20003) -> ATC (only for target drugs!)
+
+```{r}
+foo = read.csv("Wu2019_SuppData1.txt", sep="\t")
+foo = foo[, 2:3]
+
+foo = foo %>%
+  tidyr::separate_wider_delim("Medication.ATC.code",
+                              " |",
+                              names=paste0("test", 0:13),
+                              too_few="align_start") %>%
+  tidyr::pivot_longer(cols=paste0("test", 0:13),
+                      values_to="Medication ATC code") %>%
+  dplyr::select(-c("name")) %>%
+  tidyr::drop_na()
+```
+
+__hypertension__
+
+```{r}
+targetATC = c("C02", "C03", "C07", "C08", "C09")
+foo$ATC = substr(foo$`Medication ATC code`, 1, 3)
+foo = foo[foo$ATC %in% targetATC, c(1, 3)]
+
+toATC = foo
+```
+
+__lipidaemia__
+
+```{r}
+foo = foo[substr(foo$`Medication ATC code`, 1, 3) == "C10", ]
+foo$ATC = foo$`Medication ATC code`
+x = (substr(foo$ATC, 5, 5) != "X")
+foo$ATC[x] = substr(foo$ATC, 1, 5)[x]
+
+toATC = foo[, c(1, 3)]
+targetATC = sort(unique(toATC$ATC))
+
+#2024.08.11 C10AX06supplement not regarded as medication
+#2024.08.27
+#2025.04.28 refactored
+toATC = toATC[toATC$Coding!=1193, ]
+```
+
+__diabetes__
+
+```{r}
+foo = foo[substr(foo$`Medication ATC code`, 1, 3) == "A10", ]
+foo$ATC = foo$`Medication ATC code`
+x = (substr(foo$ATC, 4, 4) != "X")
+foo$ATC[x] = substr(foo$ATC, 1, 5)[x] # Insulin already truncated to A10A
+
+toATC = foo[, c(1, 3)]
+targetATC = sort(unique(toATC$ATC))
+```
+
+__depression__
+
+```{r}
+targetATC = c("N06AA", "N06AB", "N06AF", "N06AG", "N06AX")
+foo$ATC = substr(foo$`Medication ATC code`, 1, 5)
+foo = foo[foo$ATC %in% targetATC, c(1, 3)]
+
+toATC = foo
+```
+
+UK Biobank 20003 (Verbal interview > Medication) -> ATC (only for target drugs!)
+
+```{r}
+foo = as.data.frame(data.table::fread("ukb_subset.20003.RAW.tsv.gz", na.strings=c("", "NA")))
+
+foo = foo %>%
+  tidyr::pivot_longer(-c("eid"), values_to="Coding") %>%
+  tidyr::drop_na() %>%
+  dplyr::left_join(toATC, by="Coding") %>%
+  tidyr::drop_na() %>%
+  dplyr::select(-c("Coding"))
+foo$name = sub("_a.*", "", foo$name)
+```
+
+Extract instance0; convert to 0/1
+
+```{r}
+foo = foo %>%
+  filter(name == "p20003_i0") %>%
+  select(-c("name")) %>%
+  dplyr::mutate(value = 1) %>%
+  dplyr::distinct() %>%
+  tidyr::pivot_wider(names_from = "ATC", values_from = "value")
+
+foo[is.na(foo)] = 0
+```
+
+Attach to ukb_ss
+
+```{r}
+ukb_ss = ukb_ss %>%
+  left_join(foo, by="eid")
+
+x = ukb_ss[, targetATC]
+x[is.na(x)] = 0
+ukb_ss[, targetATC] = x
+
+rm(foo)
+```
+
+Check stats
+
+```{r}
+colSums(ukb_ss[, targetATC])
+
+sort(table(do.call(paste0, as.list(ukb_ss[, targetATC]))))
+```
+
+# Define affected at instance0
+
+Includes those not taking medication.
+
+__hypertension__
+
+```{r}
+ukb_ss$affected =
+  (!is.na(as.Date(ukb_ss$date_i10_first_reported_essential_primary_hypertension_f131286)) &
+     as.Date(ukb_ss$date_i10_first_reported_essential_primary_hypertension_f131286) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i11_first_reported_hypertensive_heart_disease_f131288)) &
+     as.Date(ukb_ss$date_i11_first_reported_hypertensive_heart_disease_f131288) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i12_first_reported_hypertensive_renal_disease_f131290)) &
+     as.Date(ukb_ss$date_i12_first_reported_hypertensive_renal_disease_f131290) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i13_first_reported_hypertensive_heart_and_renal_disease_f131292)) &
+     as.Date(ukb_ss$date_i13_first_reported_hypertensive_heart_and_renal_disease_f131292) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i15_first_reported_secondary_hypertension_f131294)) &
+     as.Date(ukb_ss$date_i15_first_reported_secondary_hypertension_f131294) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0)
+
+x = average_measurements_in_instance(
+  ukb_ss,
+  "diastolic_blood_pressure_automated_reading_f4079_0_*")
+# ukb_ss$affected[!is.na(x) & x >= 90] = TRUE # 2024.10.18
+ukb_ss$affected[!is.na(x) & x >= 100] = TRUE # 2024.10.25
+x = average_measurements_in_instance(
+  ukb_ss,
+  "systolic_blood_pressure_automated_reading_f4080_0_*")
+# ukb_ss$affected[!is.na(x) & x >= 140] = TRUE # 2024.10.18
+ukb_ss$affected[!is.na(x) & x >= 160] = TRUE # 2024.10.25
+```
+
+__lipidaemia__
+
+```{r}
+ukb_ss$affected =
+  (!is.na(as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814)) &
+     as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0)
+
+# 2024.08.18
+ukb_ss$affected[
+  !is.na(ukb_ss$hdl_cholesterol_f30760_0) &
+  (ukb_ss$hdl_cholesterol_f30760_0 < 40*0.02586)] = TRUE
+ukb_ss$affected[
+  !is.na(ukb_ss$ldl_direct_f30780_0) &
+  (ukb_ss$ldl_direct_f30780_0 >= 190*0.02586)] = TRUE
+```
+
+__diabetes__
+
+```{r}
+ukb_ss$affected =
+  (!is.na(as.Date(ukb_ss$date_e10_first_reported_insulindependent_diabetes_mellitus_f130706)) &
+     as.Date(ukb_ss$date_e10_first_reported_insulindependent_diabetes_mellitus_f130706) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_e11_first_reported_noninsulindependent_diabetes_mellitus_f130708)) &
+     as.Date(ukb_ss$date_e11_first_reported_noninsulindependent_diabetes_mellitus_f130708) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0)
+
+# 2024.10.18
+ukb_ss$affected[
+ !is.na(ukb_ss$glycated_haemoglobin_hba1c_f30750_0) &
+   ukb_ss$glycated_haemoglobin_hba1c_f30750_0 >= 48] = TRUE #mmol/mol
+```
+
+__depression__
+
+```{r}
+ukb_ss$affected =
+  (!is.na(as.Date(ukb_ss$date_f32_first_reported_depressive_episode_f130894)) &
+     as.Date(ukb_ss$date_f32_first_reported_depressive_episode_f130894) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_f33_first_reported_recurrent_depressive_disorder_f130896)) &
+     as.Date(ukb_ss$date_f33_first_reported_recurrent_depressive_disorder_f130896) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0)
+```
+
+OPTIONAL: Add subjects taking targetATC to affected
+
+```{r}
+table(ukb_ss$affected, rowSums(ukb_ss[, targetATC]))
+
+ukb_ss$affected = ukb_ss$affected | (rowSums(ukb_ss[, targetATC]) > 0)
+
+table(ukb_ss$affected, rowSums(ukb_ss[, targetATC]))
+```
+
+# PCA of drug use
+
+```{r}
+# data = ukb_ss[, targetATC]
+data = ukb_ss[ukb_ss$affected, targetATC]
+cor(data)
+data = t(t(data) - colMeans(data))
+s = svd(data)
+
+plot(s$d)
+```
+
+```{r}
+plotdata = as.data.frame(s$v)
+colnames(plotdata) = paste0("PC", 1:ncol(plotdata))
+plotdata$ATC = colnames(data)
+
+ggplot(data=plotdata,
+       aes(x=PC1, y=PC2)) +
+  geom_text(aes(label=ATC))
+```
+
+```{r}
+plotdata = as.data.frame(s$u)
+colnames(plotdata) = paste0("PC", 1:ncol(plotdata))
+ggplot(data=plotdata,
+       aes(x=PC1, y=PC2)) +
+  geom_bin2d()
+```
+
+# Define variables
+
+## BP
+
+BP, automated reading
+Omron 705 IT electronic blood pressure monitor
+
+```{r}
+ukb_ss$DBP_Instance0 = average_measurements_in_instance(
+  ukb_ss,
+  "diastolic_blood_pressure_automated_reading_f4079_0_*")
+ukb_ss$DBP_Instance2 = average_measurements_in_instance(
+  ukb_ss,
+  "diastolic_blood_pressure_automated_reading_f4079_2_*")
+ukb_ss$DBP_Instance3 = average_measurements_in_instance(
+  ukb_ss,
+  "diastolic_blood_pressure_automated_reading_f4079_3_*")
+
+ukb_ss$SBP_Instance0 = average_measurements_in_instance(
+  ukb_ss,
+  "systolic_blood_pressure_automated_reading_f4080_0_*")
+ukb_ss$SBP_Instance2 =average_measurements_in_instance(
+  ukb_ss,
+  "systolic_blood_pressure_automated_reading_f4080_2_*")
+ukb_ss$SBP_Instance3 = average_measurements_in_instance(
+  ukb_ss,
+  "systolic_blood_pressure_automated_reading_f4080_3_*")
+```
+
+```{r}
+BPvariables =
+  c("DBP_Instance0",
+    "DBP_Instance2", "DBP_Instance3",
+    "SBP_Instance0",
+    "SBP_Instance2", "SBP_Instance3")
+```
+
+```{r}
+for (i in BPvariables) {
+  ukb_ss[, i] = winsorize(ukb_ss[, i])
+}
+```
+
+## LDL
+
+```{r}
+ukb_ss$ldl_Instance0 =
+  ukb_ss$ldl_direct_f30780_0
+
+ukb_ss$ldl_Instance0 = winsorize(ukb_ss$ldl_Instance0)
+```
+
+## HbA1c
+
+```{r}
+ukb_ss$hba1c_Instance0 =
+  ukb_ss$glycated_haemoglobin_hba1c_f30750_0
+
+ukb_ss$hba1c_Instance0 = winsorize(ukb_ss$hba1c_Instance0)
+```
+
+## Covariates: demographics
+
+```{r echo=TRUE, warning=FALSE}
+ukb_ss$white.british = (!is.na(ukb_ss$ethnic_background_f21000_0) &
+                          ukb_ss$ethnic_background_f21000_0 == "British")
+ukb_ss$ethnic_background_f21000_0 =
+  factor(ukb_ss$ethnic_background_f21000_0)
+ukb_ss$ethnic_background_f21000_0 =
+  relevel(ukb_ss$ethnic_background_f21000_0,
+  ref = "British")
+ukb_ss$ethnic_background_5groups =
+  factor(
+    as.character(ukb_ss$ethnic_background_f21000_0),
+    levels = c("British",
+               "Any other white background",
+               "Irish",
+               "Indian",
+               "others"))
+ukb_ss$ethnic_background_5groups[
+  is.na(ukb_ss$ethnic_background_5groups)] = "others"
+
+ukb_ss$Caucasian =
+  !is.na(ukb_ss$genetic_ethnic_grouping_f22006) &
+  (ukb_ss$genetic_ethnic_grouping_f22006 == "Caucasian")
+
+ukb_ss$age = ukb_ss$age_when_attended_assessment_centre_f21003_0
+ukb_ss$agegroup = cut(ukb_ss$age, c(39, 50, 60, 73), include.lowest=TRUE)
+ukb_ss$sexagegroup = paste0(ukb_ss$sex_f31, ukb_ss$agegroup)
+ukb_ss$sexM = (ukb_ss$sex_f31 == "Male")
+ukb_ss$bmi = winsorize(ukb_ss$body_mass_index_bmi_f21001_0)
+ukb_ss$smoking = factor(ukb_ss$smoking_status_f20116_0)
+ukb_ss$alcohol = factor(ukb_ss$alcohol_drinker_status_f20117_0)
+ukb_ss$qualifications = factor(
+  ifelse(grepl("College or University degree", ukb_ss$qualifications_f6138_0),
+         "College",
+         ifelse(grepl("A levels/AS levels or equivalent", ukb_ss$qualifications_f6138_0),
+                "A",
+                ifelse(grepl("O levels/GCSEs or equivalent", ukb_ss$qualifications_f6138_0),
+                       "O",
+                       "others"))))
+ukb_ss$qualifications = relevel(ukb_ss$qualifications, "others")
+
+ukb_ss$agec2 = (ukb_ss$age - mean(ukb_ss$age, na.rm=TRUE))^2
+ukb_ss$agesexM = ukb_ss$age * ukb_ss$sexM
+```
+
+## Covariates: PC
+
+```{r}
+colnames(ukb_ss) =
+  sub("genetic_principal_components_\\|_array_", "PC",
+      sub("_f22009_.*", "", colnames(ukb_ss)))
+```
+
+# Filter individuals
+
+__European__
+
+```{r}
+ukb_ss = ukb_ss[ukb_ss$Caucasian, ]
+```
+
+__South Asian__
+
+```{r}
+# self-declared
+# ukb_ss = ukb_ss[ukb_ss$ethnic_background_f21000_0 %in% c("Indian", "Pakistani", "Bangladeshi"), ]
+
+# genetic-based seeded from self-declared
+library(RANN)
+ukb_ss = ukb_ss[rowSums(is.na(ukb_ss[, c("PC1","PC2","PC3","PC4")]))==0, ]
+nn = nn2(ukb_ss[, c("PC1","PC2","PC3","PC4")], k=5) #1st neighbour is itself
+nnidx = nn$nn.idx
+x = which(ukb_ss$ethnic_background_f21000_0 %in% c("Indian", "Pakistani", "Bangladeshi"))
+nnidx = apply(nnidx, 2, function(v){v %in% x})
+nnidx = rowMeans(nnidx) > 0.5
+ukb_ss = ukb_ss[nnidx, ]
+```
+
+```{r}
+print(paste0("Number of Individuals: ", nrow(ukb_ss)))
+```
+
+# Output files
+
+dependent variable: drug use
+
+```{r}
+output = ukb_ss[ukb_ss$affected, ]
+output$FID = output$eid
+output$IID = output$eid
+output$sexM = output$sexM * 1
+
+# write.table(
+#   output[, c("FID", "IID", targetATC)],
+#   # file="ukb_hypertensiondrug_BT.txt",
+#   # file="ukb_hypertensiondrug_DBPge90SBPge140_BT.txt",
+#   # file="ukb_hypertensiondrug_DBPge100SBPge160_BT.txt",
+#   # file="ukb_hypertensiondrug_DBPge100SBPge160_BT.IndianPakistaniBangladeshi.txt",
+#   # file="ukb_hypertensiondrug_DBPge100SBPge160_BT.IndianPakistaniBangladeshiPC.txt",
+#   # file="ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.txt",
+#   file="ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.IndianPakistaniBangladeshiPC.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+# write.table(
+#   output[, c("FID", "IID", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   # file="ukb_hypertensiondrug_covariates.txt",
+#   # file="ukb_hypertensiondrug_DBPge90SBPge140_covariates.txt",
+#   # file="ukb_hypertensiondrug_DBPge100SBPge160_covariates.txt",
+#   # file="ukb_hypertensiondrug_DBPge100SBPge160_covariates.IndianPakistaniBangladeshi.txt",
+#   # file="ukb_hypertensiondrug_DBPge100SBPge160_covariates.IndianPakistaniBangladeshiPC.txt",
+#   # file="ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.txt",
+#   file="ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.IndianPakistaniBangladeshiPC.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+
+write.table(
+  output[, c("FID", "IID", targetATC)],
+  # file="ukb_lipidaemiadrug_BT.txt",
+  # file="ukb_lipidaemiadrug_affectedexclsupplement_BT.txt",
+  # file="ukb_lipidaemiadrug_HDLlt40LDLge190_BT.txt",
+  # file="ukb_lipidaemiadrug_exclsupplement_BT.txt",
+  # file="ukb_lipidaemiadrug_exclsupplement_BT.IndianPakistaniBangladeshi.txt",
+  # file="ukb_lipidaemiadrug_exclsupplement_BT.IndianPakistaniBangladeshiPC.txt",
+  # file="ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.txt",
+  file="ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.IndianPakistaniBangladeshiPC.txt",
+  sep=" ",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+write.table(
+  output[, c("FID", "IID", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+  # file="ukb_lipidaemiadrug_covariates.txt",
+  # file="ukb_lipidaemiadrug_affectedexclsupplement_covariates.txt",
+  # file="ukb_lipidaemiadrug_HDLlt40LDLge190_covariates.txt",
+  # file="ukb_lipidaemiadrug_exclsupplement_covariates.txt",
+  # file="ukb_lipidaemiadrug_exclsupplement_covariates.IndianPakistaniBangladeshi.txt",
+  # file="ukb_lipidaemiadrug_exclsupplement_covariates.IndianPakistaniBangladeshiPC.txt",
+  # file="ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.txt",
+  file="ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.IndianPakistaniBangladeshiPC.txt",
+  sep=" ",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+
+# write.table(
+#   output[, c("FID", "IID", targetATC)],
+#   # file="ukb_diabetesdrug_BT.txt",
+#   file="ukb_diabetesdrug_HbA1cge48_BT.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+# write.table(
+#   output[, c("FID", "IID", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   # file="ukb_diabetesdrug_covariates.txt",
+#   file="ukb_diabetesdrug_HbA1cge48_covariates.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+
+# write.table(
+#   output[, c("FID", "IID", targetATC)],
+#   file="ukb_depressiondrug_BT.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+# write.table(
+#   output[, c("FID", "IID", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   file="ukb_depressiondrug_covariates.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+```
+
+dependent variable: BP
+
+```{r}
+output = ukb_ss
+output$FID = output$eid
+output$IID = output$eid
+output$sexM = output$sexM * 1
+
+# write.table(
+#   output[, c("FID", "IID", "SBP_Instance0", "DBP_Instance0")],
+#   file="ukb_BP_QT.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+# 
+# write.table(
+#   output[, c("FID", "IID", targetATC, "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   file="ukb_BP_covariates.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+
+output$affectednodrug = (output$affected & rowSums(output[, targetATC]) == 0) * 1
+
+# write.table(
+#   output[, c("FID", "IID", targetATC, "affectednodrug", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   file="ukb_BPwithaffectednodrug_covariates.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+```
+
+dependent variable: LDL
+
+```{r}
+output = ukb_ss
+output$FID = output$eid
+output$IID = output$eid
+output$sexM = output$sexM * 1
+
+# write.table(
+#   output[, c("FID", "IID", "ldl_Instance0")],
+#   file="ukb_LDL_QT.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+
+output$affectednodrug = (output$affected & rowSums(output[, targetATC]) == 0) * 1
+
+# write.table(
+#   output[, c("FID", "IID", targetATC, "affectednodrug", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   file="ukb_LDLwithaffectednodrug_covariates.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+```
+
+dependent variable: HbA1c
+
+```{r}
+output = ukb_ss
+output$FID = output$eid
+output$IID = output$eid
+output$sexM = output$sexM * 1
+
+# write.table(
+#   output[, c("FID", "IID", "hba1c_Instance0")],
+#   file="ukb_HbA1c_QT.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+
+output$affectednodrug = (output$affected & rowSums(output[, targetATC]) == 0) * 1
+
+# write.table(
+#   output[, c("FID", "IID", targetATC, "affectednodrug", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+#   file="ukb_HbA1cwithaffectednodrug_covariates.txt",
+#   sep=" ",
+#   quote=FALSE,
+#   row.names=FALSE,
+#   na="NA"
+# )
+```
+
+complications
+
+```{r}
+output = ukb_ss[ukb_ss$affected, ]
+output$FID = output$eid
+output$IID = output$eid
+
+output = cbind(
+  output[, c("FID", "IID")],
+  output[, grep("^date", colnames(output))])
+
+for (i in 3:ncol(output)) {
+  if (is.character(output[, i])) {
+    output[!is.na(output[,i]) & output[,i]=="Code has event date matching participant's date of birth", i] = NA
+    output[,i] = as.Date(output[,i])
+  }
+}
+
+datefields = c(
+  "date_of_attending_assessment_centre_f53_0",
+  "date_e10_first_reported_insulindependent_diabetes_mellitus_f130706",
+  "date_e11_first_reported_noninsulindependent_diabetes_mellitus_f130708",
+  "date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814",
+  "date_i10_first_reported_essential_primary_hypertension_f131286",
+  "date_i20_first_reported_angina_pectoris_f131296",
+  "date_i21_first_reported_acute_myocardial_infarction_f131298",
+  "date_i26_first_reported_pulmonary_embolism_f131308",
+  "date_i27_first_reported_other_pulmonary_heart_diseases_f131310",
+  "date_i28_first_reported_other_diseases_of_pulmonary_vessels_f131312",
+  "date_i46_first_reported_cardiac_arrest_f131346",
+  "date_i48_first_reported_atrial_fibrillation_and_flutter_f131350",
+  "date_i49_first_reported_other_cardiac_arrhythmias_f131352",
+  "date_i50_first_reported_heart_failure_f131354",
+  "date_i63_first_reported_cerebral_infarction_f131366",
+  "date_n18_first_reported_chronic_renal_failure_f132032"
+)
+summary(output[, datefields])
+
+write.table(
+  output[, c("FID", "IID", datefields)],
+  file="ukb_lipidaemiadrug_exclsupplement_complications.txt",
+  # file="ukb_hypertensiondrug_DBPge100SBPge160_complications.txt",
+  sep="\t",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+```
+
+# Regression
+
+```{r}
+for (i in targetATC) {
+  print(i)
+  
+  ukb_ss$y = ukb_ss[, i]
+  ukb_ss$y[! ukb_ss$affected] = NA
+  
+  a0 = glm(y ~ .,
+           data = ukb_ss[,
+                         # c("y", "sexM", "age", "bmi", paste0("PC", 1:20))],
+                         c("y", "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))],
+           family = binomial())
+  print(summary(a0))
+  print(pR2(a0))
+}
+```
+
+```{r}
+for (i in c("SBP_Instance0", "DBP_Instance0")) {
+  print(i)
+  
+  ukb_ss$y = ukb_ss[, i]
+  
+  a0 = lm(y ~ .,
+          data = ukb_ss[,
+                        c("y", targetATC, "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))])
+  print(summary(a0))
+}
+```
+
+```{r}
+for (i in c("SBP_Instance0", "DBP_Instance0")) {
+  print(i)
+  
+  ukb_ss$y = ukb_ss[, i]
+  
+  a0 = lm(y ~ .,
+          data = ukb_ss[,
+                        c("y", "affected", targetATC, "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))])
+  print(summary(a0))
+}
+```
+
+```{r}
+for (i in c("ldl_Instance0")) {
+  print(i)
+  
+  ukb_ss$y = ukb_ss[, i]
+  
+  a0 = lm(y ~ .,
+          data = ukb_ss[,
+                        c("y", "affected", targetATC, "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))])
+  print(summary(a0))
+}
+```
+
+```{r}
+for (i in c("hba1c_Instance0")) {
+  print(i)
+  
+  ukb_ss$y = ukb_ss[, i]
+  
+  a0 = lm(y ~ .,
+          data = ukb_ss[,
+                        c("y", "affected", targetATC, "sexM", "age", "bmi", "agec2", "agesexM", paste0("PC", 1:20))])
+  print(summary(a0))
+}
+```
