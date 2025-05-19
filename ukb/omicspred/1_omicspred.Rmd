@@ -1,0 +1,105 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+lipidaemia
+
+```{r}
+BT = read.table(
+  # "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_BT.txt",
+  "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.txt",
+  header=TRUE)
+traits = colnames(BT)[c(3:4, 8)]
+```
+
+hypertension
+
+```{r}
+BT = read.table(
+  # "../gwas/regenie_hypertensiondrug_DBPge100SBPge160/ukb_hypertensiondrug_DBPge100SBPge160_BT.txt",
+  "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.txt",
+  header=TRUE)
+traits = colnames(BT)[4:7]
+```
+
+Provide polygenic score (PGS) for blood metabolome/proteome calculated externally for each individual.
+For weights of PGS, use those trained on INTERVAL cohort (not UK Biobank) in https://www.omicspred.org/ 
+
+```{r}
+data = data.table::fread(
+  # "~/final/ukb/omicspred/Metabolon_INTERVAL/sscore.txt.gz",   #726 metabolites; 666 imputed
+  # "~/final/ukb/omicspred/Nightingale_INTERVAL/sscore.txt.gz", #141 metabolic traits; 141 imputed
+  # "~/final/ukb/omicspred/Olink_INTERVAL/sscore.txt.gz",       #308 proteins; 295 imputed
+  "~/final/ukb/omicspred/SomaScan_INTERVAL/sscore.txt.gz",    #2384 proteins; 2128->2127 imputed
+  header=TRUE,
+  sep="\t")
+```
+
+```{r}
+data = data[data$IID %in% BT$IID, ]
+data = as.data.frame(data)
+```
+
+```{r}
+res = do.call(
+  rbind,
+  lapply(
+    traits,
+    function (t) {
+      print(t)
+      res = broom::tidy(lm(y ~ x,
+                           data = list(
+                             x = BT[match(data$IID, BT$IID), t],
+                             y = as.matrix(data[, -c(1)]))))
+      res = res %>%
+        filter(term == "x") %>%
+        mutate(term = t) %>%
+        mutate(fdr = p.adjust(p.value, method="fdr"))
+      return(res)
+    }))
+```
+
+```{r}
+res[res$fdr < 0.01, ]
+```
+
+```{r}
+ggplot(
+  data = res,
+  aes(x = term,
+      y = p.value)) +
+  geom_point() +
+  scale_y_log10()
+```
+
+
+```{r}
+write.csv(
+  res,
+  file =
+    # "omicspred.Metabolon_INTERVAL.ukb_lipidaemiadrug_exclsupplement.csv"
+    # "omicspred.Nightingale_INTERVAL.ukb_lipidaemiadrug_exclsupplement.csv"
+    # "omicspred.Olink_INTERVAL.ukb_lipidaemiadrug_exclsupplement.csv"
+    # "omicspred.SomaScan_INTERVAL.ukb_lipidaemiadrug_exclsupplement.csv"
+
+    # "omicspred.Metabolon_INTERVAL.ukb_lipidaemiadrug_onlyaffectedexclsupplement.csv"
+    # "omicspred.Nightingale_INTERVAL.ukb_lipidaemiadrug_onlyaffectedexclsupplement.csv"
+    # "omicspred.Olink_INTERVAL.ukb_lipidaemiadrug_onlyaffectedexclsupplement.csv"
+    # "omicspred.SomaScan_INTERVAL.ukb_lipidaemiadrug_onlyaffectedexclsupplement.csv"
+
+    # "omicspred.Metabolon_INTERVAL.ukb_hypertensiondrug_DBPge100SBPge160.csv"
+    # "omicspred.Nightingale_INTERVAL.ukb_hypertensiondrug_DBPge100SBPge160.csv"
+    # "omicspred.Olink_INTERVAL.ukb_hypertensiondrug_DBPge100SBPge160.csv"
+    # "omicspred.SomaScan_INTERVAL.ukb_hypertensiondrug_DBPge100SBPge160.csv"
+
+    # "omicspred.Metabolon_INTERVAL.ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160.csv"
+    # "omicspred.Nightingale_INTERVAL.ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160.csv"
+    # "omicspred.Olink_INTERVAL.ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160.csv"
+    "omicspred.SomaScan_INTERVAL.ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160.csv"
+  )
+```
