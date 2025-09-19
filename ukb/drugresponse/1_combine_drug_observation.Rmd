@@ -1,0 +1,724 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+# Combine all drug categories
+
+```{r}
+data = do.call(
+  rbind,
+  lapply(
+    c("thiazide", "b-blocker", "ACEi_ARB", "CCB"),
+    # c("ezetimibe", "fibrate", "statin", "bileacidsequestrant", "nicotinicacid", "omega3"),
+    # c("insulin", "biguanide", "sulfonylurea", "antidiabetic_drugs_excl_biguanide_sulfonylurea"),
+    function (x) {
+      foo = readRDS(paste0("scriptseries.", x, ".rds"))
+      foo$drug = x
+      return(foo)
+    }))
+```
+
+`earliest_issue_date` is for all drugs in the database, thus indicating the initiation of the record for that subject.
+
+```{r}
+foo = read_tsv("gp_scripts.earliest_issue_date.txt.gz")
+foo = foo[!is.na(foo$earliest_issue_date), ]
+foo = foo[foo$eid %in% data$eid, ]
+
+data = rbind(
+  data.frame(
+    eid = foo$eid,
+    scriptseries = 1,
+    start = foo$earliest_issue_date,
+    stop = foo$earliest_issue_date,
+    drug = "earliest_issue_date"
+  ),
+  data)
+```
+
+`preceding` is the time to the previous prescription series (or `earliest_issue_date`).
+If `preceding` is positive, there is a drug free period in advance.
+
+`following` is the time to the following prescription series.
+If following is positive or NA, there is a drug free period afterwards.
+If following is negative, polypharmacy occured from `stop + following`
+
+```{r}
+library(dtplyr)
+
+data <- as_tibble(data)
+data <- data %>%
+  lazy_dt() %>%
+  arrange(start, stop) %>%
+  group_by(eid) %>%
+  mutate(
+    # preceding = start - lag(stop),
+    preceding = as.numeric(start) - cummax(lag(as.numeric(stop), default=-Inf)), #numeric 2025.06.27
+    # following = lead(start) - stop
+    following = lead(start, default=Inf) - stop #difftime 2025.06.27
+  ) %>%
+  as_tibble()
+```
+
+```{r}
+# mindrugfree    = 180 # drug-free period before baseline-measurement
+# maxbeforestart = 730 # baseline-measurement to drug-start
+# minafterstart  =  60 # drug-start to post-measurement
+# maxafterstart  = 730 # drug-start to post-measurement
+
+# antihypertensive, hypolipidemics
+mindrugfree    = 180 # drug-free period before baseline-measurement
+maxbeforestart = 730 # baseline-measurement to drug-start
+minafterstart  =  28 # drug-start to post-measurement
+maxafterstart  = 730 # drug-start to post-measurement
+
+# antidiabetic
+mindrugfree    = 180 # drug-free period before baseline-measurement
+maxbeforestart = 730 # baseline-measurement to drug-start
+minafterstart  =  90 # drug-start to post-measurement
+maxafterstart  = 730 # drug-start to post-measurement
+```
+
+`following` is `NA` if scriptseries is the last one for an `eid`
+
+```{r}
+data2 = data %>%
+  filter(drug != 'earliest_issue_date') %>%
+  # filter(!is.na(preceding) & as.integer(preceding) >= mindrugfree) %>%
+  filter(preceding >= mindrugfree) %>% #2025.06.27
+  # filter(as.integer(stop + pmin(following, 0, na.rm=TRUE) - start) >= minafterstart)
+  filter(as.integer(stop + pmin(following, 0) - start) >= minafterstart) #2025.06.27
+```
+
+## QC of observation; SBP, DBP
+
+where clinical event or prescription date precedes participant date of birth it has been altered to 01/01/1901.
+Where the date matches participant date of birth it has been altered to 02/02/1902.
+Where the date follows participant date of birth but is in the year of their birth it has been altered to 03/03/1903.
+Where the date was in the future this has been changed to 07/07/2037 as these are likely to have been entered as a place-holder or other system default.
+
+```{r}
+NGdate = c(as.Date("1901-01-01"), as.Date("1902-02-02"), as.Date("1903-03-03"), as.Date("2037-07-07"))
+
+foo = read_tsv("DBP.txt.gz", col_types="ddDccdd_")
+foo = foo %>% filter(!is.na(event_dt) & ! event_dt %in% NGdate)
+foo$value1[!is.na(foo$value1) & foo$value1 <= 0] = NA
+foo$value2[!is.na(foo$value2) & foo$value2 <= 0] = NA
+foo = foo %>% filter(! is.na(value1) | ! is.na(value2))
+foo = data.frame(
+ eid = foo$eid,
+ event_dt = foo$event_dt,
+ trait = "DBP",
+ value = ifelse(! is.na(foo$value1), foo$value1, foo$value2)
+)
+obs = foo
+
+foo = read_tsv("SBP.txt.gz", col_types="ddDccdd_")
+foo = foo %>% filter(!is.na(event_dt) & ! event_dt %in% NGdate)
+foo$value1[!is.na(foo$value1) & foo$value1 <= 0] = NA
+foo$value2[!is.na(foo$value2) & foo$value2 <= 0] = NA
+foo = foo %>% filter(! is.na(value1) | ! is.na(value2))
+foo = data.frame(
+ eid = foo$eid,
+ event_dt = foo$event_dt,
+ trait = "SBP",
+ value = ifelse(! is.na(foo$value1), foo$value1, foo$value2)
+)
+obs = rbind(obs, foo)
+
+foo = read_tsv("BP.txt.gz", col_types="ddDccdd_")
+foo = foo %>% filter(!is.na(event_dt) & ! event_dt %in% NGdate)
+foo = foo %>% filter(! is.na(value1) & ! is.na(value2) & foo$value1 > 0 & foo$value2 > 0)
+foo1 = data.frame(
+ eid = foo$eid,
+ event_dt = foo$event_dt,
+ trait = "DBP",
+ value = pmin(foo$value1, foo$value2)
+)
+foo2 = data.frame(
+ eid = foo$eid,
+ event_dt = foo$event_dt,
+ trait = "SBP",
+ value = pmax(foo$value1, foo$value2)
+)
+obs = rbind(obs, foo1, foo2)
+
+rm(foo, foo1, foo2)
+```
+
+```{r}
+# obs = obs[obs$value >=10 & obs$value <= 1000, ]
+obs = obs[obs$value >=20 & obs$value <= 300, ]
+
+x = quantile(obs$value[obs$trait == "DBP"], seq(0.001, 0.999, 0.001))
+plot(x)
+obs$value[obs$trait == "DBP" & (obs$value < min(x) | obs$value > max(x))] = NA
+
+x = quantile(obs$value[obs$trait == "SBP"], seq(0.001, 0.999, 0.001))
+plot(x)
+obs$value[obs$trait == "SBP" & (obs$value < min(x) | obs$value > max(x))] = NA
+
+obs = obs[!is.na(obs$value), ]
+```
+
+```{r}
+foo = as.data.frame(
+  data.table::fread(
+    "../SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    na.strings=c("", "NA")))
+
+foo0 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i0,
+  trait = "SBP",
+  value = rowMeans(foo[, c("p4080_i0_a0", "p4080_i0_a1")], na.rm=TRUE))
+foo1 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i1,
+  trait = "SBP",
+  value = rowMeans(foo[, c("p4080_i1_a0", "p4080_i1_a1")], na.rm=TRUE))
+foo2 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i2,
+  trait = "SBP",
+  value = rowMeans(foo[, c("p4080_i2_a0", "p4080_i2_a1")], na.rm=TRUE))
+foo3 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i3,
+  trait = "SBP",
+  value = rowMeans(foo[, c("p4080_i3_a0", "p4080_i3_a1")], na.rm=TRUE))
+foo = rbind(foo0, foo1, foo2, foo3)
+rm(foo0, foo1, foo2, foo3)
+foo = foo[!is.na(foo$value), ]
+
+obs = rbind(obs, foo)
+```
+
+```{r}
+foo = as.data.frame(
+  data.table::fread(
+    "../SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    na.strings=c("", "NA")))
+
+foo0 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i0,
+  trait = "DBP",
+  value = rowMeans(foo[, c("p4079_i0_a0", "p4079_i0_a1")], na.rm=TRUE))
+foo1 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i1,
+  trait = "DBP",
+  value = rowMeans(foo[, c("p4079_i1_a0", "p4079_i1_a1")], na.rm=TRUE))
+foo2 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i2,
+  trait = "DBP",
+  value = rowMeans(foo[, c("p4079_i2_a0", "p4079_i2_a1")], na.rm=TRUE))
+foo3 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i3,
+  trait = "DBP",
+  value = rowMeans(foo[, c("p4079_i3_a0", "p4079_i3_a1")], na.rm=TRUE))
+foo = rbind(foo0, foo1, foo2, foo3)
+rm(foo0, foo1, foo2, foo3)
+foo = foo[!is.na(foo$value), ]
+
+obs = rbind(obs, foo)
+```
+```{r}
+### BP variation project ###
+
+obs2 = obs %>%
+  group_by(eid, event_dt, trait) %>%
+  summarize(m=mean(value), .groups="drop_last") %>%
+  pivot_wider(names_from="trait", values_from="m") %>%
+  mutate(value=(SBP + 2*DBP)/3) %>%
+  select(eid, event_dt, value) %>%
+  ungroup() %>%
+  na.omit() %>%
+  mutate(trait="MAP")
+
+obs = obs %>% filter(trait=="SBP")
+obs = obs2
+
+# nodrugpartial (ACTUALLY ONLY HALF LINKED WITH gpscript!!); Added 2025.09.08
+scriptseries = do.call(
+  rbind,
+  lapply(
+    c("thiazide", "b-blocker", "ACEi_ARB", "CCB"),
+    function (x) {
+      foo = readRDS(paste0("scriptseries.", x, ".rds"))
+      foo$drug = x
+      return(foo)
+    }))
+obs = obs %>%
+  left_join(scriptseries, by="eid", relationship="many-to-many") %>%
+  mutate(measurementinscriptseries = event_dt >= start & event_dt <= stop) %>%
+  group_by(eid, event_dt, trait, value) %>%
+  summarize(measurementinscriptseriesany = sum(measurementinscriptseries) > 0, .groups="drop") %>%
+  filter(! measurementinscriptseriesany) %>%
+  select(eid, event_dt, trait, value)
+
+# abs(t) max at
+# SBP; SBPnodrugpartial; MAP
+# myboxcox1(value, 0):    x=4; x=4; x=4
+# myboxcox1(value, -0.8): x=7     ; x=8
+# myboxcox1(value, -1):   x=7; x=3; x=5
+data = obs %>%
+  mutate(value=myboxcox1(value, -0.8)) %>%
+  group_by(eid) %>%
+  summarize(n=n(), m=mean(value), s=sd(value), .groups="drop")
+for (x in 3:12) {
+  print(x)
+  foo = data %>% filter(n>=x)
+  print(cor.test(foo$m, foo$s))
+}
+
+# t near 0 at
+# SBP; SBPnodrugpartial; MAP
+# filter(n>=4): x=-0.5; x=-0.4; x=-0.2
+# filter(n>=5): x=-0.5; x=-0.4; x=-0.2
+# filter(n>=7): x=-0.5        ; x=-0.2
+for (x in seq(-1, 0, 0.1)) {
+  print(x)
+  data = obs %>%
+    mutate(value=myboxcox1(value, x)) %>%
+    group_by(eid) %>%
+    summarize(n=n(), m=mean(value), s=sd(value), .groups="drop") %>%
+    filter(n>=5)
+  print(cor.test(data$m, data$s))
+}
+
+data = obs %>%
+  mutate(value=myboxcox1(value, -0.2)) %>%
+  group_by(eid) %>%
+  summarize(n=n(), m=mean(value), s=sd(value), .groups="drop") %>%
+  filter(n>=4)
+
+output =
+  data %>%
+  dplyr::select(eid, m, s) %>%
+  arrange(eid) %>%
+  rename(FID=eid) %>%
+  mutate(IID=FID) %>%
+  relocate(IID, .after=FID)
+
+# Limit to White British subjects
+foo = as.data.frame(
+  data.table::fread(
+    "~/final/drug_selection/ukb/cohort/ukb_subset.wo20003.REPLACE.tsv.gz",
+    na.strings=c("", "NA")))
+foo$Caucasian =
+  !is.na(foo$p22006) &
+  (foo$p22006 == "Caucasian")
+output = output[foo$Caucasian[match(output$FID, foo$eid)], ]
+
+write.table(
+  output,
+  # file="ukb_SBPmyboxcox-05nge5_QT.txt",
+  # file="ukb_SBPnodrugpartialmyboxcox-04nge4_QT.txt",
+  file="ukb_MAPnodrugpartialmyboxcox-02nge4_QT.txt",
+  sep=" ",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+
+output2 = cbind(
+  output[, 1:2],
+  foo[match(output$FID, foo$eid), paste0("p22009_a", 1:20)])
+colnames(output2)[-c(1:2)] = paste0("PC", 1:20)
+write.table(
+  output2,
+  # file="ukb_SBPmyboxcox-05nge5_covariates.txt",
+  # file="ukb_SBPnodrugpartialmyboxcox-04nge4_covariates.txt",
+  file="ukb_MAPnodrugpartialmyboxcox-02nge4_covariates.txt",
+  sep=" ",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+```
+
+## QC of observation; LDL
+
+where clinical event or prescription date precedes participant date of birth it has been altered to 01/01/1901.
+Where the date matches participant date of birth it has been altered to 02/02/1902.
+Where the date follows participant date of birth but is in the year of their birth it has been altered to 03/03/1903.
+Where the date was in the future this has been changed to 07/07/2037 as these are likely to have been entered as a place-holder or other system default.
+
+value3:
+MEA000
+MEA096
+MEA142 umol/L -> Likely mis-specification. Keep
+MEA151 ratio -> Likely mis-specification. Keep
+mmol/l
+mmol/L
+MMOL/L
+Unknown -> Likely mis-specification. Keep
+
+```{r}
+NGdate = c(as.Date("1901-01-01"), as.Date("1902-02-02"), as.Date("1903-03-03"), as.Date("2037-07-07"))
+
+foo = read_tsv("LDL.txt.gz", col_types="ddDccddc")
+foo = foo %>% filter(!is.na(event_dt) & ! event_dt %in% NGdate)
+foo$value1[!is.na(foo$value1) & foo$value1 <= 0] = NA
+foo$value2[!is.na(foo$value2) & foo$value2 <= 0] = NA
+foo = foo %>% filter(! is.na(value1) | ! is.na(value2))
+foo = data.frame(
+ eid = foo$eid,
+ event_dt = foo$event_dt,
+ trait = "LDL",
+ value = ifelse(! is.na(foo$value1), foo$value1, foo$value2)
+)
+obs = foo
+
+rm(foo)
+```
+
+```{r}
+obs = obs[obs$value < 10, ]
+
+x = quantile(obs$value[obs$trait == "LDL"], seq(0.001, 0.999, 0.001))
+plot(x)
+obs$value[obs$trait == "LDL" & (obs$value < min(x) | obs$value > max(x))] = NA
+
+obs = obs[!is.na(obs$value), ]
+```
+
+```{r}
+foo = as.data.frame(
+  data.table::fread(
+    "../SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    na.strings=c("", "NA")))
+
+foo0 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i0,
+  trait = "LDL",
+  value = foo$p30780_i0)
+foo1 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i1,
+  trait = "LDL",
+  value = foo$p30780_i1)
+foo = rbind(foo0, foo1)
+rm(foo0, foo1)
+foo = foo[!is.na(foo$value), ]
+
+obs = rbind(obs, foo)
+```
+
+## QC of observation; HbA1c
+
+where clinical event or prescription date precedes participant date of birth it has been altered to 01/01/1901.
+Where the date matches participant date of birth it has been altered to 02/02/1902.
+Where the date follows participant date of birth but is in the year of their birth it has been altered to 03/03/1903.
+Where the date was in the future this has been changed to 07/07/2037 as these are likely to have been entered as a place-holder or other system default.
+
+value1:
+numeric
+OPR003
+
+value2:
+numeric
+
+value3:
+%
+g/l
+HbA1c
+MEA000
+MEA001   %
+MEA061
+MEA096
+MEA097   mmol/mol
+MEA142
+MEA187
+MEA205
+MEA215
+mg/mmol
+mmol
+mmol/l
+mmol/L
+mmol/mmol
+mmol/mol
+Mmol/mol
+mmol/mol Hb
+mol/l
+ng/l
+per cent
+%Total
+% total Hb
+%total Hb
+%Total Hb
+Unknown
+
+```{r}
+NGdate = c(as.Date("1901-01-01"), as.Date("1902-02-02"), as.Date("1903-03-03"), as.Date("2037-07-07"))
+
+foo = read_tsv("HbA1c.txt.gz", col_types="ddDccddc")
+foo = foo %>% filter(!is.na(event_dt) & ! event_dt %in% NGdate)
+foo$value1[!is.na(foo$value1) & foo$value1 <= 0] = NA
+foo$value2[!is.na(foo$value2) & foo$value2 <= 0] = NA
+foo = foo %>% filter(! is.na(value1) | ! is.na(value2))
+# HbA1 [%]: convert to HbA1c [%], HbA1 = 1.18 × HbA1c + 1.67
+x = grep("^42c.*$", foo$read_2)
+foo[x, c("value1", "value2")] = (foo[x, c("value1", "value2")] - 1.67) / 1.18
+# HbA1c [%]: convert to HbA1c [mmol/mol], IFCC = (10.93 x DCCT) - 23.5
+x = union(grep("^42W5.*$", foo$read_2),
+          union(which(foo$read_3 %in% c("XaPbt", "Xaezd", "Xaeze")),
+                which(foo$value3 %in% c("MEA097", "mmol/mol"))))
+x = setdiff(seq(nrow(foo)), x)
+foo[x, c("value1", "value2")] = (foo[x, c("value1", "value2")] * 10.93) - 23.5
+foo = data.frame(
+ eid = foo$eid,
+ event_dt = foo$event_dt,
+ trait = "HbA1c",
+ value = ifelse(! is.na(foo$value1), foo$value1, foo$value2)
+)
+obs = foo
+
+rm(foo)
+```
+
+```{r}
+obs = obs[obs$value > 17, ]
+obs = obs[obs$value < 200, ]
+
+x = quantile(obs$value[obs$trait == "HbA1c"], seq(0.001, 0.999, 0.001))
+plot(x)
+obs$value[obs$trait == "HbA1c" & (obs$value < min(x) | obs$value > max(x))] = NA
+
+obs = obs[!is.na(obs$value), ]
+```
+
+```{r}
+foo = as.data.frame(
+  data.table::fread(
+    "ukb_subset.HbA1c.tsv.gz",
+    na.strings=c("", "NA")))
+
+foo0 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i0,
+  trait = "HbA1c",
+  value = foo$p30750_i0)
+foo1 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i1,
+  trait = "HbA1c",
+  value = foo$p30750_i1)
+foo = rbind(foo0, foo1)
+rm(foo0, foo1)
+foo = foo[!is.na(foo$value), ]
+
+foo = foo[foo$value < 200, ]
+
+obs = rbind(obs, foo)
+```
+
+## Combine with observation
+
+Power that maximizes `delta / delta_sd` in next block:
+SBP, 3(monotonic); 4(average)
+DBP, 2(monotonic); 4(average)
+Adopt 3
+2025.06.09 Change to 1
+
+```{r}
+obs = obs[obs$trait=="SBP", ]
+# obs = obs[obs$trait=="DBP", ]
+# obs = obs[obs$trait=="LDL", ]
+# obs = obs[obs$trait=="HbA1c", ]
+
+# baseline-measurement
+data3 = inner_join(data2, obs, by='eid', relationship="many-to-many")
+
+data3 = data3 %>%
+  filter(as.integer(event_dt - start) + preceding >= mindrugfree) %>%
+  filter(as.integer(start - event_dt) <= maxbeforestart) %>%
+  filter(event_dt <= start)
+
+# data3 = data3 %>%
+#   group_by(eid, scriptseries, drug) %>%
+#   slice_max(event_dt) %>% slice(1) %>%
+#   ungroup()
+#   select(-trait) %>%
+#   rename(event_dt.drugfree = event_dt, value.drugfree = value)
+
+# 2025.06.02
+data3 = data3 %>%
+  mutate(w = (maxbeforestart - as.integer(start - event_dt) + 1)^1) %>%
+  group_by(eid, scriptseries, start, stop, drug, preceding, following) %>%
+  summarize(
+    # value.drugfree=mean(value),
+    value.drugfree=sum(value * w) / sum(w),
+    n.drugfree=n(),
+    # n.drugfree=sum(w),
+    actualminbeforestart=min(as.integer(start - event_dt)),
+    .groups="drop")
+
+# post-measurement
+data4 = inner_join(data3, obs, by='eid', relationship="many-to-many")
+
+data4 = data4 %>%
+  filter(as.integer(event_dt - start) >= minafterstart) %>%
+  filter(event_dt <= stop + pmin(0, following)) %>%
+  filter(as.integer(event_dt - start) <= maxafterstart)
+
+# data4 = data4 %>%
+#   group_by(eid, scriptseries, drug) %>%
+#   slice_min(event_dt) %>% slice(1) %>%
+#   ungroup()
+#   select(-trait) %>%
+#   rename(event_dt.drugtake = event_dt, value.drugtake = value)
+
+# 2025.06.02
+data4 = data4 %>%
+  mutate(w = (maxafterstart - as.integer(event_dt - start) + 1)^1) %>%
+  group_by(eid, scriptseries, start, stop, drug, preceding, following,
+           value.drugfree, n.drugfree, actualminbeforestart) %>%
+  summarize(
+    # value.drugtake=mean(value),
+    value.drugtake=sum(value * w) / sum(w),
+    n.drugtake=n(),
+    # n.drugtake=sum(w),
+    actualminafterstart=min(as.integer(event_dt - start)),
+    .groups="drop")
+
+# delta
+data4 = data4 %>%
+  mutate(value.delta = value.drugtake - value.drugfree)
+```
+
+The time to reach 50% of the maximum estimated BP lowering effect was 1 week.
+https://doi.org/10.1136/hrt.2010.221473
+
+The lipid-lowering effect of statins is obvious after 4–6 weeks.
+https://doi.org/10.1185/030079903125002225
+
+SBP
+How `value.delta` changes according `actualminbeforestart`:
+- Increases steeply from `actualminbeforestart` 0 to 100, approaching `value.delta = 0`
+- People's BP might be fluctuating in the scale of months.
+  After one high observation, they might have started medication.
+
+How `value.delta` changes according `actualminafterstart`:
+- Minimum around `actualminafterstart` 14 (computed under minafterstart=7)
+- Increases steeply from `actualminbeforestart` 0 to 100, still `value.delta < 0`
+
+LDL
+How `value.delta` changes according `actualminbeforestart`:
+- Minimum around `actualminbeforestart = 3`
+- Increases steeply from `actualminbeforestart` 0 to 200, still `value.delta << 0`
+
+How `value.delta` changes according `actualminafterstart`:
+- Minimum around `actualminafterstart` 30 (computed under minafterstart=7)
+- Increases steeply from `actualminbeforestart` 0 to 200, still `value.delta < 0`
+
+metformin, sulfonylurea initiation to stable HbA1c decrease is 3 to 4 months.
+https://www.ncbi.nlm.nih.gov/books/NBK518983/
+https://www.drugs.com/medical-answers/how-long-metformin-take-work-3574615/
+https://doi.org/10.1186/1743-7075-7-83
+https://doi.org/10.2337/dc07-0339
+https://doi.org/10.1016/s0026-0495(97)90319-x
+
+HbA1c (hemoglobin A1c) reflects your average blood glucose level over the past 2 to 3 months.
+
+```{r}
+ggplot(data=data4,
+       aes(
+         # x=n.drugfree,
+         # x=n.drugtake,
+         x=actualminbeforestart,
+         # x=actualminafterstart,
+         y=value.delta)) +
+  geom_point(size=0.3, alpha=0.2) +
+  # geom_smooth(method="gam")
+  geom_quantile(quantiles=c(0.25, 0.5, 0.75), method="rqss", lambda=50) +
+   scale_x_continuous(limits=c(0,200))
+```
+
+Largest statistics attained under power of 1 for w above.
+
+```{r}
+library(tidymodels)
+lm_fit =
+  linear_reg() %>%
+  fit(value.drugtake ~ value.drugfree + value.drugfree2,
+      data = data4 %>%
+        filter(drug=="biguanide") %>%
+        mutate(value.drugfree2 = (value.drugfree - mean(value.drugfree))^2))
+tidy(lm_fit)
+```
+
+
+```{r}
+dim(data4)
+table(data4$drug)
+
+data4 %>%
+  group_by(drug) %>% # filter(actualminbeforestart <= 120) %>%
+  summarize(
+    n=n(),
+    base=mean(value.drugfree), base_sd=sd(value.drugfree),
+    post=mean(value.drugtake), post_sd=sd(value.drugtake),
+    delta=mean(value.delta),   delta_sd=sd(value.delta))
+```
+
+```{r}
+write.table(
+  data4, # %>% filter(actualminbeforestart <= 120),
+  # file="antihypertensive.SBP.txt",
+  # file="antihypertensive.SBP.actualminbeforestartle120.txt",
+  # file="antihypertensive.SBP.actualminbeforestartle90.txt",
+  # file="antihypertensive.SBP.minafterstart28.txt",
+  # file="antihypertensive.SBP.minafterstart28.actualminbeforestartle90.txt",
+  # file="antihypertensive.SBP.minafterstart28.wpower1.txt",
+  # file="antihypertensive.DBP.txt",
+  # file="hypolipidemics.LDL.actualminbeforestartle120.txt",
+  # file="hypolipidemics.LDL.actualminbeforestartle90.txt",
+  # file="hypolipidemics.LDL.minafterstart28.txt",
+  # file="hypolipidemics.LDL.minafterstart28.actualminbeforestartle90.txt",
+  # file="hypolipidemics.LDL.minafterstart28.wpower1.txt",
+  file="antidiabetic.HbA1c.wpower1.txt",
+  sep="\t",
+  row.names=FALSE,
+  quote=FALSE)
+```
+
+## Plot
+
+```{r}
+ggplot(data=data4) +
+  geom_boxplot(aes(x=drug, y=value.delta))
+```
+
+```{r}
+dataplot = data4 %>%
+  select(drug, value.drugfree, value.drugtake) %>%
+  pivot_longer(cols=-c(drug))
+
+dataplot$name = sub("value.", "", dataplot$name)
+dataplot$name2 = paste0(dataplot$drug, " ", dataplot$name)
+dataplot$name2 = factor(
+  dataplot$name2,
+  levels = c(
+    "thiazide drugfree",  "thiazide drugtake",
+    "b-blocker drugfree", "b-blocker drugtake",
+    "CCB drugfree",       "CCB drugtake",
+    "ACEi_ARB drugfree",  "ACEi_ARB drugtake"
+  ))
+
+ggplot(data=dataplot) +
+  geom_boxplot(aes(x=name2, y=value), outlier.size=0.5) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  xlab(NULL)
+```
+

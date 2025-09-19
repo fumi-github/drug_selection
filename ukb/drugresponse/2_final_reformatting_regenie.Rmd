@@ -1,0 +1,246 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+# Input file for GWAS
+
+```{r}
+INT = function (x) {
+  qnorm((rank(x, na.last="keep") - 3/8) / (sum(!is.na(x)) - 2*(3/8) + 1))
+}
+
+myboxcox1 = function (x, l=1) {
+  if (l==0) {
+    return(log(x))
+  } else {
+    return((x^l - 1)/l)
+  }
+}
+```
+
+```{r}
+myboxcox2 = function (x, y, lambda=seq(-2, 2, 1/10)) {
+  coef = as.numeric(lapply(
+    lambda,
+    function (l) {
+      df = data.frame(x=myboxcox1(x, l), y=myboxcox1(y, l))
+      # a0 = lm(y ~ x, data=df)
+      # return(a0$coefficients[2])
+      # return(sum((df$y - mean(df$y) - df$x + mean(df$x))^2) /
+      #          sum((df$x - mean(df$x))^2 + (df$y - mean(df$y))^2))
+      # 2025.09.11 myboxcoxv2
+      return(abs(log(sum((df$x - mean(df$x))^2) /
+                       sum((df$y - mean(df$y))^2))))
+    }))
+  print(coef)
+  # return(lambda[which.min(abs(coef - 1))])
+  return(lambda[which.min(coef)])
+}
+# myboxcox2(dataplot$value.drugfree, dataplot$value.drugtake)
+```
+
+```{r}
+data4 = read.table(
+  # "antihypertensive.SBP.txt", #used?
+  # "antihypertensive.SBP.actualminbeforestartle120.txt", #used?
+  # "antihypertensive.SBP.minafterstart28.txt", #used?
+  "antihypertensive.SBP.minafterstart28.wpower1.txt",
+  # "hypolipidemics.LDL.minafterstart28.wpower1.txt",
+  # "antidiabetic.HbA1c.wpower1.txt",
+  sep="\t",
+  header=TRUE)
+
+data5 = data4 %>%
+  group_by(drug) %>%
+  mutate(value.drugfree2 = (value.drugfree - mean(value.drugfree))^2) %>%
+  ungroup() %>%
+  mutate(residual = NA, myboxcox=NA)
+for (d in unique(data5$drug)) {
+  x = (data5$drug == d)
+  a0 = lm(value.drugtake ~ value.drugfree + value.drugfree2, data=data5, subset=x)
+  data5$residual[x] = resid(a0)
+}
+for (d in unique(data5$drug)) {
+  x = (data5$drug == d)
+  l = myboxcox2(data5$value.drugfree[x], data5$value.drugtake[x],
+                # lambda=seq(-1, 1, 1/20)) #myboxcox01
+                lambda=seq(-2, 2, 1/20)) #myboxcoxv2
+  print(paste(d, sum(x), l))
+  data5$myboxcox[x] = myboxcox1(data5$value.drugtake[x], l) - myboxcox1(data5$value.drugfree[x], l)
+}
+
+output =
+  # data4 %>%
+  # select(eid, drug, value.delta) %>%
+  # group_by(eid, drug) %>%
+  # summarize(value = mean(value.delta), .groups="drop") %>%
+  data5 %>%
+  dplyr::select(eid, drug, residual, myboxcox, value.drugfree, value.drugtake, value.delta) %>%
+  group_by(eid, drug) %>%
+  summarize(value =
+              # mean(residual),
+              # mean(value.delta), #LDLdelta
+              # mean(log(value.drugtake/value.drugfree)), #LDLlogratio
+              mean(myboxcox),
+            .groups="drop") %>%
+  pivot_wider(names_from=drug, values_from=value) %>%
+  arrange(eid) %>%
+  rename(FID=eid) %>%
+  mutate(IID=FID) %>%
+  relocate(IID, .after=FID)
+
+# Limit to White British subjects
+foo = as.data.frame(
+  data.table::fread(
+    "~/final/drug_selection/ukb/cohort/ukb_subset.wo20003.REPLACE.tsv.gz",
+    na.strings=c("", "NA")))
+foo$Caucasian =
+  !is.na(foo$p22006) &
+  (foo$p22006 == "Caucasian")
+output = output[foo$Caucasian[match(output$FID, foo$eid)], ]
+
+write.table(
+  output,
+  # file="ukb_antihypertensive.SBP_QT.txt",
+  # file="ukb_antihypertensive.SBPmyboxcox_QT.txt",
+  # file="ukb_antihypertensive.SBPmyboxcox01_QT.txt",
+  file="ukb_antihypertensive.SBPmyboxcoxv2_QT.txt",
+  # file="ukb_hypolipidemics.LDL_QT.txt",
+  # file="ukb_hypolipidemics.LDLdelta_QT.txt",
+  # file="ukb_hypolipidemics.LDLlogratio_QT.txt",
+  # file="ukb_hypolipidemics.LDLmyboxcox_QT.txt",
+  # file="ukb_hypolipidemics.LDLmyboxcox01_QT.txt",
+  # file="ukb_hypolipidemics.LDLmyboxcoxv2_QT.txt",
+  # file="ukb_antidiabetic.HbA1c_QT.txt",
+  # file="ukb_antidiabetic.HbA1cmyboxcox_QT.txt",
+  # file="ukb_antidiabetic.HbA1cmyboxcox01_QT.txt",
+  sep=" ",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+
+output2 = cbind(
+  output[, 1:2],
+  foo[match(output$FID, foo$eid), paste0("p22009_a", 1:20)])
+colnames(output2)[-c(1:2)] = paste0("PC", 1:20)
+write.table(
+  output2,
+  file="ukb_antihypertensive.SBP_covariates.txt",
+  # file="ukb_hypolipidemics.LDL_covariates.txt",
+  # file="ukb_antidiabetic.HbA1c_covariates.txt",
+  sep=" ",
+  quote=FALSE,
+  row.names=FALSE,
+  na="NA"
+)
+```
+
+```{r}
+dataplot = data5 %>%
+  # filter(drug=="statin") %>%
+  # filter(drug=="ACEi_ARB") %>%
+  # filter(drug=="thiazide") %>%
+  filter(drug=="b-blocker") %>%
+  filter(eid %in% output$IID) %>%
+  mutate(deltaboxcox0 = myboxcox1(value.drugtake, 0) - myboxcox1(value.drugfree, 0),
+         deltaboxcox1 = myboxcox1(value.drugtake, 1) - myboxcox1(value.drugfree, 1))
+
+ggplot(
+  data=dataplot,
+  aes(x=myboxcox1(value.drugfree, 1),
+      y=myboxcox1(value.drugtake, 1)
+      # y=value.delta
+      # y=log(value.drugtake/value.drugfree)
+      # y = residual
+      )) +
+  # geom_point(size=0.5, alpha=0.5, shape=20) +
+  geom_bin2d(binwidth=0.1) +
+  geom_smooth() +
+  geom_abline(slope=1, intercept=0)
+
+library(GGally)
+ggpairs(dataplot,
+        columns=c("value.drugfree", "value.drugtake", "deltaboxcox1", "myboxcox", "deltaboxcox0"),
+        lower = list(continuous = wrap(ggally_points, size=0.1, alpha=0.1)),
+        diag = list(continuous = "blankDiag"))
+```
+
+```{r}
+foo = read.table("../../drug_selection/ukb/gwas/rs7412.raw", header=TRUE)
+dataplot$rs7412_T = foo$rs7412_T[match(dataplot$eid, foo$IID)]
+dataplot$rs7412_T = factor(dataplot$rs7412_T,
+                           labels = c("CC", "CT", "TT"))
+
+dataplot = dataplot[!is.na(dataplot$rs7412_T), ]
+dataplot = dataplot[order(dataplot$eid), ]
+```
+
+```{r}
+df = data.frame(
+  # x = dataplot$value.drugfree,
+  # y = dataplot$value.drugtake,
+  # x=log(dataplot$value.drugfree),
+  # y=log(dataplot$value.drugtake),
+  x=myboxcox1(dataplot$value.drugfree, 0),
+  y=myboxcox1(dataplot$value.drugtake, 0),
+  # x = INT(c(dataplot$value.drugfree, dataplot$value.drugtake))[1:length(dataplot$value.drugfree)],
+  # y = INT(c(dataplot$value.drugfree, dataplot$value.drugtake))[-c(1:length(dataplot$value.drugfree))],
+  rs7412_T = dataplot$rs7412_T)
+
+level <- 0.95
+cfac  <- sqrt(qchisq(level, df = 2))
+
+seg_df <- df %>%
+  group_by(rs7412_T) %>%
+  summarize(
+    mx = mean(x), my = mean(y),
+    cov_xx = var(x), cov_yy = var(y),
+    cov_xy = cov(x, y),
+    .groups = "drop"
+  ) %>%
+  rowwise() %>%
+  mutate(
+    {S <- matrix(c(cov_xx, cov_xy, cov_xy, cov_yy), 2, 2)
+    eig <- eigen(S)
+    vx = eig$vectors[1,1]
+    vy = eig$vectors[2,1]
+    a  <- cfac * sqrt(eig$values[1])
+    tibble(vx = vx, vy = vy, a = a)}
+  ) %>%
+  ungroup()
+
+ggplot(df, aes(x, y)) +
+  geom_point(size=0.5, alpha=0.5, shape=16) +
+  geom_abline(slope=1, intercept=0) +
+  stat_ellipse(type = "norm", level = level, linewidth = 0.8, color = "deepskyblue") +
+  geom_segment(
+    data = seg_df,
+    aes(x = mx - a*vx, y = my - a*vy,
+        xend = mx + a*vx, yend = my + a*vy),
+    inherit.aes = FALSE,
+    linewidth = 0.8, color = "deepskyblue"
+  ) +
+  geom_point(
+    data = seg_df,
+    aes(x = mx, y = my),
+    inherit.aes = FALSE,
+    color = "deepskyblue"
+  ) +
+  coord_fixed(ratio = 1) +
+  facet_grid(cols = vars(rs7412_T)) +
+  # xlab("LDL drug free") +
+  # ylab("LDL under statin")
+  # xlab("log(LDL) drug free") +
+  # ylab("log(LDL) under statin")
+  xlab("Transformed LDL (l=0.35) drug free") +
+  ylab("Transformed LDL (l=0.35) under statin")
+  # xlab("INT LDL drug free") +
+  # ylab("INT LDL under statin")
+```
+
