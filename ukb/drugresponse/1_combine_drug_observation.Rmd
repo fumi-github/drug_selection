@@ -169,7 +169,7 @@ obs = obs[!is.na(obs$value), ]
 ```{r}
 foo = as.data.frame(
   data.table::fread(
-    "../SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    "ukb_subset.txt.gz",
     na.strings=c("", "NA")))
 
 foo0 = data.frame(
@@ -202,7 +202,7 @@ obs = rbind(obs, foo)
 ```{r}
 foo = as.data.frame(
   data.table::fread(
-    "../SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    "ukb_subset.txt.gz",
     na.strings=c("", "NA")))
 
 foo0 = data.frame(
@@ -395,7 +395,7 @@ obs = obs[!is.na(obs$value), ]
 ```{r}
 foo = as.data.frame(
   data.table::fread(
-    "../SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    "ukb_subset.txt.gz",
     na.strings=c("", "NA")))
 
 foo0 = data.frame(
