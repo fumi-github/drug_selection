@@ -7,6 +7,41 @@ output: html_notebook
 library(tidyverse)
 ```
 
+```{r}
+INT = function (x) {
+  qnorm((rank(x, na.last="keep") - 3/8) / (sum(!is.na(x)) - 2*(3/8) + 1))
+}
+
+myboxcox1 = function (x, l=1) {
+  if (l==0) {
+    return(log(x))
+  } else {
+    return((x^l - 1)/l)
+  }
+}
+```
+
+```{r}
+myboxcox2 = function (x, y, lambda=seq(-2, 2, 1/10)) {
+  coef = as.numeric(lapply(
+    lambda,
+    function (l) {
+      df = data.frame(x=myboxcox1(x, l), y=myboxcox1(y, l))
+      # a0 = lm(y ~ x, data=df)
+      # return(a0$coefficients[2])
+      # return(sum((df$y - mean(df$y) - df$x + mean(df$x))^2) /
+      #          sum((df$x - mean(df$x))^2 + (df$y - mean(df$y))^2))
+      # 2025.09.11 myboxcoxv2
+      return(abs(log(sum((df$x - mean(df$x))^2) /
+                       sum((df$y - mean(df$y))^2))))
+    }))
+  print(coef)
+  # return(lambda[which.min(abs(coef - 1))])
+  return(lambda[which.min(coef)])
+}
+# myboxcox2(dataplot$value.drugfree, dataplot$value.drugtake)
+```
+
 # Combine all drug categories
 
 ```{r}
@@ -231,6 +266,7 @@ foo = foo[!is.na(foo$value), ]
 
 obs = rbind(obs, foo)
 ```
+
 ```{r}
 ### BP variation project ###
 
@@ -246,6 +282,24 @@ obs2 = obs %>%
 
 obs = obs %>% filter(trait=="SBP")
 obs = obs2
+
+# MAPinstance0: 2 readings in instance0
+foo = as.data.frame(
+  data.table::fread(
+    "ukb_subset.txt.gz",
+    na.strings=c("", "NA")))
+foo0 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i0,
+  trait = "MAP",
+  value = (foo$p4080_i0_a0 + 2*foo$p4079_i0_a0)/3)
+foo1 = data.frame(
+  eid = foo$eid,
+  event_dt = foo$p53_i0,
+  trait = "MAP",
+  value = (foo$p4080_i0_a1 + 2*foo$p4079_i0_a1)/3)
+obs = rbind(foo0, foo1)
+obs = obs[!is.na(obs$value), ]
 
 # nodrugpartial (ACTUALLY ONLY HALF LINKED WITH gpscript!!); Added 2025.09.08
 scriptseries = do.call(
@@ -285,21 +339,23 @@ for (x in 3:12) {
 # filter(n>=4): x=-0.5; x=-0.4; x=-0.2
 # filter(n>=5): x=-0.5; x=-0.4; x=-0.2
 # filter(n>=7): x=-0.5        ; x=-0.2
+# MAPinstance0
+# filter(n>=2): x=0.1
 for (x in seq(-1, 0, 0.1)) {
   print(x)
   data = obs %>%
     mutate(value=myboxcox1(value, x)) %>%
     group_by(eid) %>%
     summarize(n=n(), m=mean(value), s=sd(value), .groups="drop") %>%
-    filter(n>=5)
+    filter(n>=2)
   print(cor.test(data$m, data$s))
 }
 
 data = obs %>%
-  mutate(value=myboxcox1(value, -0.2)) %>%
+  mutate(value=myboxcox1(value, 0.1)) %>%
   group_by(eid) %>%
   summarize(n=n(), m=mean(value), s=sd(value), .groups="drop") %>%
-  filter(n>=4)
+  filter(n>=2)
 
 output =
   data %>%
@@ -323,7 +379,8 @@ write.table(
   output,
   # file="ukb_SBPmyboxcox-05nge5_QT.txt",
   # file="ukb_SBPnodrugpartialmyboxcox-04nge4_QT.txt",
-  file="ukb_MAPnodrugpartialmyboxcox-02nge4_QT.txt",
+  # file="ukb_MAPnodrugpartialmyboxcox-02nge4_QT.txt",
+  file="ukb_MAPinstance0myboxcox01nge2_QT.txt",
   sep=" ",
   quote=FALSE,
   row.names=FALSE,
@@ -338,7 +395,8 @@ write.table(
   output2,
   # file="ukb_SBPmyboxcox-05nge5_covariates.txt",
   # file="ukb_SBPnodrugpartialmyboxcox-04nge4_covariates.txt",
-  file="ukb_MAPnodrugpartialmyboxcox-02nge4_covariates.txt",
+  # file="ukb_MAPnodrugpartialmyboxcox-02nge4_covariates.txt",
+  file="ukb_MAPinstance0myboxcox01nge2_covariates.txt",
   sep=" ",
   quote=FALSE,
   row.names=FALSE,
