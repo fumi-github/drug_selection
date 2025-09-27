@@ -156,7 +156,8 @@ evaluate_model_performance = function(outcome_variable, covariate_df, genotype_d
   results_table = cbind(results_table, roc_test_df)
   
   # Calculate AUC and CI for the PGS alone.
-  pgs_roc = pROC::roc(response=scores_df$trait, predictor=as.numeric(scores_df$pgs))
+  pgs_roc = pROC::roc(response=scores_df$trait, predictor=as.numeric(scores_df$pgs),
+                      direction="<")
   results_table$pgsauc = pgs_roc$auc
   results_table$pgsaucL95 = ci.auc(pgs_roc)[1]
   results_table$pgsaucU95 = ci.auc(pgs_roc)[3]
@@ -236,7 +237,7 @@ for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09
                split_indices = splittrainvalidtest(nrow(phenotype_data), stest=test_seed)
                genotype_test  = genotype_data[split_indices$test, ]
                phenotype_test  = phenotype_data[split_indices$test, ]
-               covariate_test  = covariate_data[split_indices$test, -c(4:5)]
+               covariate_test  = covariate_data[split_indices$test, -c(4:5)] # with PC *1
                
                # Inner loop to create 20 different train/validation splits for each test set.
                # This stabilizes model coefficient estimation.
