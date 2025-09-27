@@ -100,6 +100,75 @@ decileproportion = function(score, outcome) {
   return(proportions_by_decile$proportion)
 }
 
+# A function to assess the performance of the two-step model on a dataset.
+evaluate_model_performance = function(outcome_variable, covariate_df, genotype_df, base_coeffs, pgs_coeffs) {
+  # Calculate the base model score and the polygenic score (PGS).
+  scores_df = data.frame(
+    trait = outcome_variable,
+    basal_score = as.matrix(cbind(1, covariate_df)) %*% base_coeffs,
+    pgs = as.matrix(genotype_df) %*% pgs_coeffs)
+  
+  # Remove rows with any missing values and calculate the combined score.
+  scores_df = scores_df[rowSums(is.na(scores_df)) == 0, ]
+  scores_df$combined_score = scores_df$basal_score + scores_df$pgs
+  
+  # Assess PGS alone.
+  pgs_only_model_summary = summary(pgs_only_model <- glm(factor(trait) ~ pgs, data=scores_df, family=binomial()))
+  pgs_Z = ifelse(nrow(pgs_only_model_summary$coefficients)>=2, pgs_only_model_summary$coefficients[2,3], NA)
+  pgs_R2 = anova(pgs_only_model)[2,2] / anova(pgs_only_model)[1,4]
+  
+  # Assess base model score alone.
+  base_only_model_summary = summary(base_only_model <- glm(factor(trait) ~ basal_score, data=scores_df, family=binomial()))
+  basal_Z = ifelse(nrow(base_only_model_summary$coefficients)>=2, base_only_model_summary$coefficients[2,3], NA)
+  basal_R2 = anova(base_only_model)[2,2] / anova(base_only_model)[1,4]
+  
+  # Assess combined score.
+  combined_model_summary = summary(combined_model <- glm(factor(trait) ~ combined_score, data=scores_df, family=binomial()))
+  combined_Z = ifelse(nrow(combined_model_summary$coefficients)>=2, combined_model_summary$coefficients[2,3], NA)
+  combined_R2 = anova(combined_model)[2,2] / anova(combined_model)[1,4]
+  
+  # Assess base model and PGS as separate predictors.
+  full_model_summary = summary(full_model <- glm(factor(trait) ~ basal_score + pgs, data=scores_df, family=binomial()))
+  basal_coeff = ifelse(nrow(full_model_summary$coefficients)>=2, full_model_summary$coefficients[2,1], NA)
+  pgs_coeff = ifelse(nrow(full_model_summary$coefficients)>=3, full_model_summary$coefficients[3,1], NA)
+  
+  # Encompassing test: Check if PGS adds information beyond the base model score.
+  encompassing_model_summary = summary(encompassing_model <- glm(factor(trait) ~ basal_score + combined_score, data=scores_df, family=binomial()))
+  encompass_combined_Z = ifelse(nrow(encompassing_model_summary$coefficients)>=3, encompassing_model_summary$coefficients[3,3], NA)
+  
+  # Compile results into a data.table.
+  results_table = data.table(
+    pgsZ=pgs_Z, pgsR2=pgs_R2,
+    basalZ=basal_Z, basalR2=basal_R2,
+    basalpgsZ=combined_Z, basalpgsR2=combined_R2,
+    basalcoeff=basal_coeff, pgscoeff=pgs_coeff, encompassbasalpgsZ=encompass_combined_Z,
+    basaldecileproportion    = list(decileproportion(scores_df$basal_score, scores_df$trait)),
+    pgsdecileproportion      = list(decileproportion(scores_df$pgs, scores_df$trait)),
+    basalpgsdecileproportion = list(decileproportion(scores_df$combined_score, scores_df$trait)))
+  
+  # Compare AUC of combined model vs. base model using pROC.
+  roc_test_results = pROC::roc.test(
+    response=scores_df$trait, 
+    predictor1=as.numeric(scores_df$combined_score),
+    predictor2=as.numeric(scores_df$basal_score))
+  roc_test_df = c(roc_test_results$estimate, roc_test_results$statistic, roc_test_results$p.value)
+  names(roc_test_df)[4] = "P"
+  roc_test_df = data.frame(as.list(roc_test_df))
+  results_table = cbind(results_table, roc_test_df)
+  
+  # Calculate AUC and CI for the PGS alone.
+  pgs_roc = pROC::roc(response=scores_df$trait, predictor=as.numeric(scores_df$pgs))
+  results_table$pgsauc = pgs_roc$auc
+  results_table$pgsaucL95 = ci.auc(pgs_roc)[1]
+  results_table$pgsaucU95 = ci.auc(pgs_roc)[3]
+  
+  # Compare AUC using R2ROC package.
+  auc_diff_results = R2ROC::auc_diff(scores_df[, c("trait", "combined_score", "basal_score")],1,2,nv=nrow(scores_df),kv=mean(scores_df$trait))
+  results_table = cbind(results_table, data.frame(auc_diff_results))
+  
+  return(results_table)
+}
+
 
 
 data = read.table("ukb_imp_chr1_v3_qc.snps.raw", header=TRUE, sep="\t")
@@ -133,56 +202,6 @@ data = data[, -c(1:2)]
 pheno = pheno[, -c(1:2)]
 covariates = covariates[, -c(1:2)]
 
-
-assess2steps = function(trait, covariates, data, coef1, coef2) {
-  combined = data.frame(
-    trait = trait,
-    basal = as.matrix(cbind(1, covariates)) %*% coef1,
-    pgs = as.matrix(data) %*% coef2)
-  combined = combined[rowSums(is.na(combined)) == 0, ]
-  combined$basalpgs = combined$basal + combined$pgs
-  x = summary(a1 <- glm(factor(trait) ~ pgs, data=combined, family=binomial()))
-  pgsZ = ifelse(nrow(x$coefficients)>=2, x$coefficients[2,3], NA)
-  pgsR2 = anova(a1)[2,2] / anova(a1)[1,4]
-  x = summary(a2 <- glm(factor(trait) ~ basal, data=combined, family=binomial()))
-  basalZ = ifelse(nrow(x$coefficients)>=2, x$coefficients[2,3], NA)
-  basalR2 = anova(a2)[2,2] / anova(a2)[1,4]
-  x = summary(a3 <- glm(factor(trait) ~ basalpgs, data=combined, family=binomial()))
-  basalpgsZ = ifelse(nrow(x$coefficients)>=2, x$coefficients[2,3], NA)
-  basalpgsR2 = anova(a3)[2,2] / anova(a3)[1,4]
-  x = summary(a4 <- glm(factor(trait) ~ basal + pgs, data=combined, family=binomial()))
-  basalcoeff = ifelse(nrow(x$coefficients)>=2, x$coefficients[2,1], NA)
-  pgscoeff = ifelse(nrow(x$coefficients)>=3, x$coefficients[3,1], NA)
-  x = summary(a5 <- glm(factor(trait) ~ basal + basalpgs, data=combined, family=binomial()))
-  encompassbasalpgsZ = ifelse(nrow(x$coefficients)>=3, x$coefficients[3,3], NA)
-  res = data.table(
-    pgsZ=pgsZ, pgsR2=pgsR2,
-    basalZ=basalZ, basalR2=basalR2,
-    basalpgsZ=basalpgsZ, basalpgsR2=basalpgsR2,
-    basalcoeff=basalcoeff, pgscoeff=pgscoeff, encompassbasalpgsZ=encompassbasalpgsZ,
-    basaldecileproportion    = list(decileproportion(combined$basal, combined$trait)),
-    pgsdecileproportion      = list(decileproportion(combined$pgs, combined$trait)),
-    basalpgsdecileproportion = list(decileproportion(combined$basalpgs, combined$trait)))
-  
-  a3 = pROC::roc.test(
-    response=combined$trait, 
-    predictor1=as.numeric(combined$basalpgs),
-    predictor2=as.numeric(combined$basal))
-  res2 = c(a3$estimate, a3$statistic, a3$p.value)
-  names(res2)[4] = "P"
-  res2 = data.frame(as.list(res2))
-  res = cbind(res, res2)
-  
-  x = pROC::roc(response=combined$trait, predictor=as.numeric(combined$pgs))
-  res$pgsauc = x$auc
-  res$pgsaucL95 = ci.auc(x)[1]
-  res$pgsaucU95 = ci.auc(x)[3]
-  
-  res2 = R2ROC::auc_diff(combined[, c("trait", "basalpgs", "basal")],1,2,nv=nrow(combined),kv=mean(combined$trait))
-  res = cbind(res, data.frame(res2))
-  
-  return(res)
-}
 
 ### main function
 for (t in c("C10AA")) { # "C10AA", "C10AB", "C10AX09" "C02"
@@ -233,9 +252,9 @@ for (t in c("C10AA")) { # "C10AA", "C10AB", "C10AX09" "C02"
                           res = data.table::data.table(trait = t, glmnets=glmnets, stest = stest, strain = strain,
                                                        coef1=list(x$base_model_coeffs[1:4]), coef2=list(x$pgs_coeffs))
                           
-                          r = assess2steps(phenovalid[, t], covariatesvalid[, c(1:3)], datavalid, x$base_model_coeffs[1:4], x$pgs_coeffs)
+                          r = evaluate_model_performance(phenovalid[, t], covariatesvalid[, c(1:3)], datavalid, x$base_model_coeffs[1:4], x$pgs_coeffs)
                           res = cbind(res, r)
-                          # r = assess2steps(phenovalid[, t], covariatesvalid[, c(1:3)], datavalid, x$base_model_coeffs[1:4], x$pgs_coeffsb)
+                          # r = evaluate_model_performance(phenovalid[, t], covariatesvalid[, c(1:3)], datavalid, x$base_model_coeffs[1:4], x$pgs_coeffsb)
                           # res = cbind(res, r)
                           return(res)
                         })
@@ -254,11 +273,11 @@ for (t in c("C10AA")) { # "C10AA", "C10AB", "C10AX09" "C02"
                  coef2b = coef2 * mean(res$pgscoeff, na.rm=TRUE) * nrow(res) / (nrow(res) - sum(is.na(res$pgscoeff)))
                }
                
-               x = assess2steps(phenotest[, ttest], covariatestest[, c(1:3)], datatest, coef1, coef2)
+               x = evaluate_model_performance(phenotest[, ttest], covariatestest[, c(1:3)], datatest, coef1, coef2)
                colnames(x) = paste0(colnames(x), "avg")
                res=cbind(res, x)
                
-               x = assess2steps(phenotest[, ttest], covariatestest[, c(1:3)], datatest, coef1, coef2b)
+               x = evaluate_model_performance(phenotest[, ttest], covariatestest[, c(1:3)], datatest, coef1, coef2b)
                colnames(x) = paste0(colnames(x), "adj")
                res=cbind(res, x)
                
