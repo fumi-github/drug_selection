@@ -170,37 +170,48 @@ evaluate_model_performance = function(outcome_variable, covariate_df, genotype_d
 }
 
 
+# DATA LOADING AND PREPARATION
+# ---
+# Load genetic data for chromosome 1.
+genotype_data = read.table("ukb_imp_chr1_v3_qc.snps.raw", header=TRUE, sep="\t")
+# genotype_data = read.table("ukb_imp_chr1_v3_qc.withHF.snps.raw", header=TRUE, sep="\t")
+genotype_data = genotype_data[, -c(3:6)] # Remove PAT, MAT, SEX, PHENOTYPE columns.
 
-data = read.table("ukb_imp_chr1_v3_qc.snps.raw", header=TRUE, sep="\t")
-# data = read.table("ukb_imp_chr1_v3_qc.withHF.snps.raw", header=TRUE, sep="\t")
-data = data[, -c(3:6)]
+# Loop to load and merge genetic data for chromosomes 2 through 22.
 for (i in 2:22) {
   print(i)
-  foo = read.table(paste0("ukb_imp_chr", i, "_v3_qc.snps.raw"), header=TRUE, sep="\t")
-  # foo = read.table(paste0("ukb_imp_chr", i, "_v3_qc.withHF.snps.raw"), header=TRUE, sep="\t")
-  print(identical(data$FID, foo$FID))
-  data = cbind(data, foo[, -c(1:6)])
+  chr_data = read.table(paste0("ukb_imp_chr", i, "_v3_qc.snps.raw"), header=TRUE, sep="\t")
+  # chr_data = read.table(paste0("ukb_imp_chr", i, "_v3_qc.withHF.snps.raw"), header=TRUE, sep="\t")
+  
+  # Verify that sample IDs (FID) are identical before merging.
+  print(identical(genotype_data$FID, chr_data$FID))
+  
+  # Column-bind the new chromosome data, excluding its sample ID columns.
+  genotype_data = cbind(genotype_data, chr_data[, -c(1:6)])
 }
 
-pheno = read.table(
-  # "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_BT.txt", #20240723
-  # "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_BT.txt", #20240819
+# Load phenotype and covariate data.
+phenotype_data = read.table(
+# "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_BT.txt", #20240723
+# "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_BT.txt", #20240819
   "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_BT.txt", #20240827
-  # "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_BT.txt", #20241018
-  # "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_BT.txt", #20241018
-  header=TRUE, sep=" ")
-covariates = read.table(
-  # "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_covariates.txt", #20240723
-  # "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_covariates.txt", #20240819
+# "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_BT.txt", #20241018
+# "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_BT.txt", #20241018
+    header=TRUE, sep=" ")
+covariate_data = read.table(
+# "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_covariates.txt", #20240723
+# "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_covariates.txt", #20240819
   "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_covariates.txt", #20240827
-  # "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_covariates.txt", #20241018
-  # "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_covariates.txt", #20241018
-  header=TRUE, sep=" ")
-identical(pheno$FID, covariates$FID)
-data = data[match(pheno$FID, data$FID), ]
-data = data[, -c(1:2)]
-pheno = pheno[, -c(1:2)]
-covariates = covariates[, -c(1:2)]
+# "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_covariates.txt", #20241018
+# "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_covariates.txt", #20241018
+    header=TRUE, sep=" ")
+
+# Align data frames and remove sample ID columns (FID, IID).
+identical(phenotype_data$FID, covariate_data$FID)
+genotype_data = genotype_data[match(phenotype_data$FID, genotype_data$FID), ]
+genotype_data = genotype_data[, -c(1:2)]
+phenotype_data = phenotype_data[, -c(1:2)]
+covariate_data = covariate_data[, -c(1:2)]
 
 
 ### main function
@@ -216,33 +227,33 @@ for (t in c("C10AA")) { # "C10AA", "C10AB", "C10AX09" "C02"
              function(stest) {
                print(stest)
                
-               x = splittrainvalidtest(nrow(pheno), stest=stest)
-               datatest  = data[x$test, ]
-               phenotest  = pheno[x$test, ]
-               covariatestest  = covariates[x$test, -c(4:5)]
+               x = splittrainvalidtest(nrow(phenotype_data), stest=stest)
+               datatest  = genotype_data[x$test, ]
+               phenotest  = phenotype_data[x$test, ]
+               covariatestest  = covariate_data[x$test, -c(4:5)]
                
                res=
                  lapply(1:20,
                         function (strain) {
                           print(strain)
                           
-                          x = splittrainvalidtest(nrow(pheno), stest=stest, strain=strain)
-                          datatrain = data[x$train, ]
-                          datavalid = data[x$valid, ]
-                          phenotrain = pheno[x$train, ]
-                          phenovalid = pheno[x$valid, ]
-                          # covariatestrain = covariates[x, ]
-                          # covariatestest  = covariates[y, ]
-                          # covariatestrain = covariates[x, -c(1:5)]
-                          # covariatestest  = covariates[y, -c(1:5)]
-                          covariatestrain = covariates[x$train, -c(4:5)] # with PC *1
-                          covariatesvalid = covariates[x$valid, -c(4:5)] # with PC *1
-                          # covariatestrain = covariates[x$train, 1:3] # wo PC (similar to *1)
-                          # covariatesvalid = covariates[x$valid, 1:3]
-                          # datatrain = cbind(datatrain, covariates[x, 1:3]) # sex age bmi SNP
-                          # datatest  = cbind(datatest,  covariates[y, 1:3])
-                          # datatrain = covariates[x, 1:3] # sex age bmi only
-                          # datatest  = covariates[y, 1:3]
+                          x = splittrainvalidtest(nrow(phenotype_data), stest=stest, strain=strain)
+                          datatrain = genotype_data[x$train, ]
+                          datavalid = genotype_data[x$valid, ]
+                          phenotrain = phenotype_data[x$train, ]
+                          phenovalid = phenotype_data[x$valid, ]
+                          # covariatestrain = covariate_data[x, ]
+                          # covariatestest  = covariate_data[y, ]
+                          # covariatestrain = covariate_data[x, -c(1:5)]
+                          # covariatestest  = covariate_data[y, -c(1:5)]
+                          covariatestrain = covariate_data[x$train, -c(4:5)] # with PC *1
+                          covariatesvalid = covariate_data[x$valid, -c(4:5)] # with PC *1
+                          # covariatestrain = covariate_data[x$train, 1:3] # wo PC (similar to *1)
+                          # covariatesvalid = covariate_data[x$valid, 1:3]
+                          # datatrain = cbind(datatrain, covariate_data[x, 1:3]) # sex age bmi SNP
+                          # datatest  = cbind(datatest,  covariate_data[y, 1:3])
+                          # datatrain = covariate_data[x, 1:3] # sex age bmi only
+                          # datatest  = covariate_data[y, 1:3]
                           
                           # phenotrain$trait = phenotrain[, t]
                           
