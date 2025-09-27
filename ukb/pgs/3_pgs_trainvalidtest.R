@@ -60,9 +60,8 @@ train_two_step_model = function(outcome_variable, covariate_df, genotype_df, glm
   non_na_genotypes = genotype_df[complete_cases_mask, ]
   
   # Mean-center the genotype data.
-  for (i in 1:ncol(non_na_genotypes)) { 
-    non_na_genotypes[, i] = non_na_genotypes[, i] - mean(non_na_genotypes[, i])
-  }
+  non_na_genotypes <- scale(non_na_genotypes, center=TRUE, scale=FALSE)
+  
   
   # Step 2: Fit a penalized (LASSO/elastic net) model using genotypes to predict the residuals.
   pgs_model_fit = glmnet(
