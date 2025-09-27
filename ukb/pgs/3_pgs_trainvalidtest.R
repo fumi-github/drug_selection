@@ -214,92 +214,103 @@ phenotype_data = phenotype_data[, -c(1:2)]
 covariate_data = covariate_data[, -c(1:2)]
 
 
-### main function
-for (t in c("C10AA")) { # "C10AA", "C10AB", "C10AX09" "C02"
-  print(t)
-  ttest = t #"C10AB"
-  results = data.table::data.table()
-  # for (glmnets in c(seq(0.001, 0.009, 0.001), seq(0.01, 0.09, 0.01), seq(0.1, 1, 0.1))) {
-    for (glmnets in 0.006) {
-    print(glmnets)
-    res=
+# MAIN ANALYSIS
+# ---
+# Define the trait(s) to be analyzed and the specific trait to be used for testing.
+for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09", "C02"
+  print(current_trait)
+  test_trait = current_trait #"C10AB"
+  all_results = data.table::data.table()
+  
+  # Loop over the glmnet penalty parameter (lambda). Currently set to a single value.
+  # for (glmnets_param in c(seq(0.001, 0.009, 0.001), seq(0.01, 0.09, 0.01), seq(0.1, 1, 0.1))) {
+  for (glmnets_param in 0.006) {
+    print(glmnets_param)
+    
+    # Outer loop for repeated hold-out validation, creating 20 different test sets.
+    test_run_results_list =
       lapply(1:20,
-             function(stest) {
-               print(stest)
+             function(test_seed) {
+               print(test_seed)
                
-               x = splittrainvalidtest(nrow(phenotype_data), stest=stest)
-               datatest  = genotype_data[x$test, ]
-               phenotest  = phenotype_data[x$test, ]
-               covariatestest  = covariate_data[x$test, -c(4:5)]
+               # Split data based on the current test seed.
+               split_indices = splittrainvalidtest(nrow(phenotype_data), stest=test_seed)
+               genotype_test  = genotype_data[split_indices$test, ]
+               phenotype_test  = phenotype_data[split_indices$test, ]
+               covariate_test  = covariate_data[split_indices$test, -c(4:5)]
                
-               res=
+               # Inner loop to create 20 different train/validation splits for each test set.
+               # This stabilizes model coefficient estimation.
+               validation_run_results_list =
                  lapply(1:20,
-                        function (strain) {
-                          print(strain)
+                        function (train_seed) {
+                          print(train_seed)
                           
-                          x = splittrainvalidtest(nrow(phenotype_data), stest=stest, strain=strain)
-                          datatrain = genotype_data[x$train, ]
-                          datavalid = genotype_data[x$valid, ]
-                          phenotrain = phenotype_data[x$train, ]
-                          phenovalid = phenotype_data[x$valid, ]
-                          # covariatestrain = covariate_data[x, ]
-                          # covariatestest  = covariate_data[y, ]
-                          # covariatestrain = covariate_data[x, -c(1:5)]
-                          # covariatestest  = covariate_data[y, -c(1:5)]
-                          covariatestrain = covariate_data[x$train, -c(4:5)] # with PC *1
-                          covariatesvalid = covariate_data[x$valid, -c(4:5)] # with PC *1
-                          # covariatestrain = covariate_data[x$train, 1:3] # wo PC (similar to *1)
-                          # covariatesvalid = covariate_data[x$valid, 1:3]
-                          # datatrain = cbind(datatrain, covariate_data[x, 1:3]) # sex age bmi SNP
-                          # datatest  = cbind(datatest,  covariate_data[y, 1:3])
-                          # datatrain = covariate_data[x, 1:3] # sex age bmi only
-                          # datatest  = covariate_data[y, 1:3]
+                          # Split data into train and validation sets.
+                          inner_split_indices = splittrainvalidtest(nrow(phenotype_data), stest=test_seed, strain=train_seed)
+                          genotype_train = genotype_data[inner_split_indices$train, ]
+                          genotype_valid = genotype_data[inner_split_indices$valid, ]
+                          phenotype_train = phenotype_data[inner_split_indices$train, ]
+                          phenotype_valid = phenotype_data[inner_split_indices$valid, ]
+                          covariate_train = covariate_data[inner_split_indices$train, -c(4:5)] # with PC *1
+                          covariate_valid = covariate_data[inner_split_indices$valid, -c(4:5)] # with PC *1
                           
-                          # phenotrain$trait = phenotrain[, t]
+                          # Train the two-step model on the training data.
+                          trained_model = train_two_step_model(phenotype_train[, current_trait], covariate_train, genotype_train, glmnets=glmnets_param)
                           
-                          x = train_two_step_model(phenotrain[, t], covariatestrain, datatrain, glmnets=glmnets)
+                          # Store the results and coefficients.
+                          single_run_result = data.table::data.table(trait = current_trait, glmnets=glmnets_param, stest = test_seed, strain = train_seed,
+                                                                     coef1=list(trained_model$base_model_coeffs[1:4]), coef2=list(trained_model$pgs_coeffs))
                           
+                          # Evaluate the trained model on the validation set.
+                          validation_assessment = evaluate_model_performance(phenotype_valid[, current_trait], covariate_valid[, c(1:3)], genotype_valid, trained_model$base_model_coeffs[1:4], trained_model$pgs_coeffs)
                           
-                          res = data.table::data.table(trait = t, glmnets=glmnets, stest = stest, strain = strain,
-                                                       coef1=list(x$base_model_coeffs[1:4]), coef2=list(x$pgs_coeffs))
-                          
-                          r = evaluate_model_performance(phenovalid[, t], covariatesvalid[, c(1:3)], datavalid, x$base_model_coeffs[1:4], x$pgs_coeffs)
-                          res = cbind(res, r)
-                          # r = evaluate_model_performance(phenovalid[, t], covariatesvalid[, c(1:3)], datavalid, x$base_model_coeffs[1:4], x$pgs_coeffsb)
-                          # res = cbind(res, r)
-                          return(res)
+                          # Combine results.
+                          single_run_result = cbind(single_run_result, validation_assessment)
+                          return(single_run_result)
                         })
-               res = do.call(rbind, res)
-               coef1 = colMeans(do.call(rbind, res$coef1))
-               # coef1 = res$coef1[[1]]
-               coef2 = res$coef2
-               # for (i in 1:nrow(res)) {
-               #   coef2[[i]] = coef2[[i]] * res$pgscoeff[i]
-               # }
-               coef2 = colMeans(do.call(rbind, coef2))
-               if (all(is.na(res$pgscoeff))) {
-                 coef2b = coef2 #zero
+               
+               # Combine results from all 20 validation runs.
+               validation_results_df = do.call(rbind, validation_run_results_list)
+               
+               # Average the coefficients from the 20 validation runs to create a stable final model.
+               avg_base_coeffs = colMeans(do.call(rbind, validation_results_df$coef1))
+               avg_pgs_coeffs = colMeans(do.call(rbind, validation_results_df$coef2))
+               
+               # Create an adjusted version of the PGS coefficients, rescaled by their average effect size in the validation models.
+               if (all(is.na(validation_results_df$pgscoeff))) {
+                 adjusted_avg_pgs_coeffs = avg_pgs_coeffs # No adjustment if all are NA.
                } else {
-                 # nrow(res) onwards compensates for the zero rows in res$coef2
-                 coef2b = coef2 * mean(res$pgscoeff, na.rm=TRUE) * nrow(res) / (nrow(res) - sum(is.na(res$pgscoeff)))
+                 # This calculation corrects the mean for NA values, which is equivalent to mean(x, na.rm=TRUE).
+                 rescaling_factor = mean(validation_results_df$pgscoeff, na.rm=TRUE)
+                 # Compensates for the zero rows in res$coef2
+                 rescaling_factor = rescaling_factor * nrow(validation_results_df) / (nrow(validation_results_df) - sum(is.na(validation_results_df$pgscoeff)))
+                 adjusted_avg_pgs_coeffs = avg_pgs_coeffs * rescaling_factor
                }
                
-               x = evaluate_model_performance(phenotest[, ttest], covariatestest[, c(1:3)], datatest, coef1, coef2)
-               colnames(x) = paste0(colnames(x), "avg")
-               res=cbind(res, x)
+               # Evaluate the averaged model on the held-out test set.
+               test_assessment_avg = evaluate_model_performance(phenotype_test[, test_trait], covariate_test[, c(1:3)], genotype_test, avg_base_coeffs, avg_pgs_coeffs)
+               colnames(test_assessment_avg) = paste0(colnames(test_assessment_avg), "avg")
                
-               x = evaluate_model_performance(phenotest[, ttest], covariatestest[, c(1:3)], datatest, coef1, coef2b)
-               colnames(x) = paste0(colnames(x), "adj")
-               res=cbind(res, x)
+               # Evaluate the adjusted model on the held-out test set.
+               test_assessment_adj = evaluate_model_performance(phenotype_test[, test_trait], covariate_test[, c(1:3)], genotype_test, avg_base_coeffs, adjusted_avg_pgs_coeffs)
+               colnames(test_assessment_adj) = paste0(colnames(test_assessment_adj), "adj")
                
-               return(res)
+               # Combine the validation results with the test assessments.
+               final_results_for_test_seed = cbind(validation_results_df, test_assessment_avg, test_assessment_adj)
+               
+               return(final_results_for_test_seed)
              })
-    res=do.call(rbind, res)
-    results = rbind(results, res)
+    
+    # Combine results from all 20 test runs.
+    combined_test_runs_df = do.call(rbind, test_run_results_list)
+    all_results = rbind(all_results, combined_test_runs_df)
   }
-  if (t == ttest) {
-    saveRDS(results, file=paste0(t, ".rds"))
+  
+  # Save the final results to an RDS file.
+  if (current_trait == test_trait) {
+    saveRDS(all_results, file=paste0(current_trait, ".rds"))
   } else {
-    saveRDS(results, file=paste0(t, ".test", ttest, ".rds"))
+    saveRDS(all_results, file=paste0(current_trait, ".test", test_trait, ".rds"))
   }
 }
