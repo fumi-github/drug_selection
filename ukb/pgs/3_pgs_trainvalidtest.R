@@ -283,11 +283,10 @@ for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09
                
                # Create an adjusted version of the PGS coefficients, rescaled by their average effect size in the validation models.
                if (all(is.na(validation_results_df$pgscoeff))) {
-                 adjusted_avg_pgs_coeffs = avg_pgs_coeffs # No adjustment if all are NA.
+                 adjusted_avg_pgs_coeffs = avg_pgs_coeffs # No adjustment if all are NA; actually is zero
                } else {
-                 # This calculation corrects the mean for NA values, which is equivalent to mean(x, na.rm=TRUE).
                  rescaling_factor = mean(validation_results_df$pgscoeff, na.rm=TRUE)
-                 # Compensates for the zero rows in res$coef2
+                 # Compensates for the zero rows in validation_results_df$coef2
                  rescaling_factor = rescaling_factor * nrow(validation_results_df) / (nrow(validation_results_df) - sum(is.na(validation_results_df$pgscoeff)))
                  adjusted_avg_pgs_coeffs = avg_pgs_coeffs * rescaling_factor
                }
