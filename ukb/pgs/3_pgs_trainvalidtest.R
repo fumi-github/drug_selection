@@ -84,8 +84,8 @@ decilecut = function(score) {
   if (length(unique(quantiles)) < 11) {
     min_diff = min(diff(sort(unique(score)))) / 2
     set.seed(1)
-    score_jittered = score + runif(length(score), max=min_diff)
-    quantiles = quantile(score_jittered, seq(0, 1, 0.1), na.rm=TRUE)
+    score = score + runif(length(score), max=min_diff)
+    quantiles = quantile(score, seq(0, 1, 0.1), na.rm=TRUE)
   }
   return(cut(score, quantiles, include.lowest=TRUE))
 }
