@@ -1,5 +1,5 @@
 library(glmnet)
-library(ridge)
+# library(ridge)
 library(ggplot2)
 library(dplyr)
 library(data.table)
@@ -63,7 +63,7 @@ train_two_step_model = function(outcome_variable, covariate_df, genotype_df, glm
   non_na_genotypes <- scale(non_na_genotypes, center=TRUE, scale=FALSE)
   
   
-  # Step 2: Fit a penalized (LASSO/elastic net) model using genotypes to predict the residuals.
+  # Step 2: Fit a penalized (LASSO) model using genotypes to predict the residuals.
   pgs_model_fit = glmnet(
     x = as.matrix(non_na_genotypes),
     y = non_na_residuals)
@@ -192,19 +192,23 @@ for (i in 2:22) {
 
 # Load phenotype and covariate data.
 phenotype_data = read.table(
-# "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_BT.txt", #20240723
-# "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_BT.txt", #20240819
+  # "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_BT.txt", #20240723
+  # "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_BT.txt", #20240819
   "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_BT.txt", #20240827
-# "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_BT.txt", #20241018
-# "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_BT.txt", #20241018
-    header=TRUE, sep=" ")
+  # "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.txt",
+  # "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_BT.txt", #20241018
+  # "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.txt",
+  # "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_BT.txt", #20241018
+  header=TRUE, sep=" ")
 covariate_data = read.table(
-# "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_covariates.txt", #20240723
-# "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_covariates.txt", #20240819
+  # "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_covariates.txt", #20240723
+  # "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_covariates.txt", #20240819
   "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_covariates.txt", #20240827
-# "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_covariates.txt", #20241018
-# "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_covariates.txt", #20241018
-    header=TRUE, sep=" ")
+  # "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.txt",
+  # "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_covariates.txt", #20241018
+  # "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.txt",
+  # "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_covariates.txt", #20241018
+  header=TRUE, sep=" ")
 
 # Align data frames and remove sample ID columns (FID, IID).
 identical(phenotype_data$FID, covariate_data$FID)
@@ -217,7 +221,7 @@ covariate_data = covariate_data[, -c(1:2)]
 # MAIN ANALYSIS
 # ---
 # Define the trait(s) to be analyzed and the specific trait to be used for testing.
-for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09", "C02"
+for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09", "C03"
   print(current_trait)
   test_trait = current_trait #"C10AB"
   all_results = data.table::data.table()
