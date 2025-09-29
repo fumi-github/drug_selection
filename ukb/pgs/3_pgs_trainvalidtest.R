@@ -194,19 +194,19 @@ for (i in 2:22) {
 phenotype_data = read.table(
   # "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_BT.txt", #20240723
   # "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_BT.txt", #20240819
-  "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_BT.txt", #20240827
-  # "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.txt",
+  # "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_BT.txt", #20240827
+  "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.txt", #20250928
   # "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_BT.txt", #20241018
-  # "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.txt",
+  # "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.txt", #20250928
   # "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_BT.txt", #20241018
   header=TRUE, sep=" ")
 covariate_data = read.table(
   # "../gwas/regenie_lipidaemiadrug/ukb_lipidaemiadrug_covariates.txt", #20240723
   # "../gwas/regenie_lipidaemiadrug_HDLlt40LDLge190/ukb_lipidaemiadrug_HDLlt40LDLge190_covariates.txt", #20240819
-  "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_covariates.txt", #20240827
-  # "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.txt",
+  # "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_covariates.txt", #20240827
+  "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.txt", #20250928
   # "../gwas/regenie_hypertensiondrug_DBPge90SBPge140/ukb_hypertensiondrug_DBPge90SBPge140_covariates.txt", #20241018
-  # "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.txt",
+  # "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.txt", #20250928
   # "../gwas/regenie_diabetesdrug_HbA1cge48/ukb_diabetesdrug_HbA1cge48_covariates.txt", #20241018
   header=TRUE, sep=" ")
 
