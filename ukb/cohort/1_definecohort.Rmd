@@ -218,6 +218,8 @@ ukb_ss$affected[!is.na(x) & x >= 160] = TRUE # 2024.10.25
 
 __lipidaemia__
 
+diagnosed at or before instance0
+
 ```{r}
 ukb_ss$affected =
   (!is.na(as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814)) &
@@ -231,6 +233,22 @@ ukb_ss$affected[
 ukb_ss$affected[
   !is.na(ukb_ss$ldl_direct_f30780_0) &
   (ukb_ss$ldl_direct_f30780_0 >= 190*0.02586)] = TRUE
+```
+
+diagnosed after instance0
+
+```{r}
+x = (!is.na(as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814)) &
+       as.integer(
+         as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814) -
+           as.Date(ukb_ss$date_of_attending_assessment_centre_f53_0)) <= 365.2422 * 5)
+ukb_ss$affected5yr = x & ! ukb_ss$affected
+
+x = (!is.na(as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814)) &
+       as.integer(
+         as.Date(ukb_ss$date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814) -
+           as.Date(ukb_ss$date_of_attending_assessment_centre_f53_0)) <= 365.2422 * 10)
+ukb_ss$affected10yr = x & ! ukb_ss$affected
 ```
 
 __diabetes__
@@ -259,6 +277,30 @@ ukb_ss$affected =
      ukb_ss$date_of_attending_assessment_centre_f53_0) |
   (!is.na(as.Date(ukb_ss$date_f33_first_reported_recurrent_depressive_disorder_f130896)) &
      as.Date(ukb_ss$date_f33_first_reported_recurrent_depressive_disorder_f130896) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0)
+```
+
+__ihd__
+
+```{r}
+ukb_ss$affected =
+  (!is.na(as.Date(ukb_ss$date_i20_first_reported_angina_pectoris_f131296)) &
+     as.Date(ukb_ss$date_i20_first_reported_angina_pectoris_f131296) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i21_first_reported_acute_myocardial_infarction_f131298)) &
+     as.Date(ukb_ss$date_i21_first_reported_acute_myocardial_infarction_f131298) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i22_first_reported_subsequent_myocardial_infarction_f131300)) &
+     as.Date(ukb_ss$date_i22_first_reported_subsequent_myocardial_infarction_f131300) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i23_first_reported_certain_current_complications_following_acute_myocardial_infarction_f131302)) &
+     as.Date(ukb_ss$date_i23_first_reported_certain_current_complications_following_acute_myocardial_infarction_f131302) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+  (!is.na(as.Date(ukb_ss$date_i24_first_reported_other_acute_ischaemic_heart_diseases_f131304)) &
+     as.Date(ukb_ss$date_i24_first_reported_other_acute_ischaemic_heart_diseases_f131304) <=
+     ukb_ss$date_of_attending_assessment_centre_f53_0) |
+    (!is.na(as.Date(ukb_ss$date_i25_first_reported_chronic_ischaemic_heart_disease_f131306)) &
+     as.Date(ukb_ss$date_i25_first_reported_chronic_ischaemic_heart_disease_f131306) <=
      ukb_ss$date_of_attending_assessment_centre_f53_0)
 ```
 
