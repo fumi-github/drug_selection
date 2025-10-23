@@ -4,18 +4,12 @@ library(data.table)
 library(dplyr)
 library(ggplot2)
 
-### Combine partial computations
-# radix="aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement.NGdecilecut/"
-# i="C10AA"
-# x=rbind(readRDS(paste0(radix,i,".1.rds")), readRDS(paste0(radix,i,".2.rds")), readRDS(paste0(radix,i,".3.rds")))
-# saveRDS(x, file=paste0(radix,"auc.",i,".PC.wowinsorize.rds"))
-
 # data = readRDS("aucR2ROC_lipidaemiadrug_exclsupplement/auc.C10AA.PC.wowinsorize.rds")
-data = readRDS("aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement.NGdecilecut/auc.C10AA.PC.wowinsorize.rds")
+data = readRDS("aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.C10AA.PC.wowinsorize.rds")
 # data = readRDS("aucR2ROC_hypertensiondrug_DBPge90SBPge140/auc.C02.PC.wowinsorize.pilot.rds")
 # data = readRDS("aucR2ROC_hypertensiondrug_DBPge90SBPge140.withHF/auc.C02.PC.wowinsorize.rds")
 # data = readRDS("aucR2ROC_hypertensiondrug_DBPge100SBPge160.withHF/auc.C03.PC.wowinsorize.rds")
-data = readRDS("aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160.NGdecilecut/auc.C03.PC.wowinsorize.rds")
+data = readRDS("aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.C03.PC.wowinsorize.rds")
 
 data$pgsauc = as.numeric(data$pgsauc)
 plotdata = data %>%
