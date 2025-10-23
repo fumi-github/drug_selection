@@ -223,8 +223,10 @@ covariate_data = covariate_data[, -c(1:2)]
 # Define the trait(s) to be analyzed and the specific trait to be used for testing.
 for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09", "C03"
   print(current_trait)
-  test_trait = current_trait #"C10AB"
-  all_results = data.table::data.table()
+  for (test_trait in current_trait) {
+  # for (test_trait in setdiff(c("C10AA", "C10AB", "C10AX09"), current_trait)) {
+  # for (test_trait in setdiff(c("C03", "C07", "C08", "C09"), current_trait)) {
+    all_results = data.table::data.table()
   
   # Loop over the glmnet penalty parameter (lambda). Currently set to a single value.
   # for (glmnets_param in c(seq(0.001, 0.009, 0.001), seq(0.01, 0.09, 0.01), seq(0.1, 1, 0.1))) {
@@ -316,4 +318,5 @@ for (current_trait in c("C10AA")) { # Example traits: "C10AA", "C10AB", "C10AX09
   } else {
     saveRDS(all_results, file=paste0(current_trait, ".test", test_trait, ".rds"))
   }
+}
 }
