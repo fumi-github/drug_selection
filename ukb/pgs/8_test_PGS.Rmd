@@ -1,0 +1,441 @@
+---
+title: "score"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+# BTfile = "score_IndianPakistaniBangladeshi/ukb_lipidaemiadrug_exclsupplement_BT.IndianPakistaniBangladeshi.txt"
+# covariatesfile = "score_IndianPakistaniBangladeshi/ukb_lipidaemiadrug_exclsupplement_covariates.IndianPakistaniBangladeshi.txt"
+
+# BTfile = "score_IndianPakistaniBangladeshiPC/ukb_lipidaemiadrug_exclsupplement_BT.IndianPakistaniBangladeshiPC.txt"
+# covariatesfile = "score_IndianPakistaniBangladeshiPC/ukb_lipidaemiadrug_exclsupplement_covariates.IndianPakistaniBangladeshiPC.txt"
+
+# BTfile = "score_IndianPakistaniBangladeshiPConlyaffected/ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.IndianPakistaniBangladeshiPC.txt"
+# covariatesfile = "score_IndianPakistaniBangladeshiPConlyaffected/ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.IndianPakistaniBangladeshiPC.txt"
+
+# BTfile = "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_BT.txt"
+# covariatesfile = "../gwas/regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_covariates.txt"
+
+BTfile = "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_BT.txt"
+covariatesfile = "../gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/ukb_lipidaemiadrug_onlyaffectedexclsupplement_covariates.txt"
+
+t = "C10AA"
+# t = "C10AB"
+# t = "C10AX09"
+
+# BTfile = "score_IndianPakistaniBangladeshi/ukb_hypertensiondrug_DBPge100SBPge160_BT.IndianPakistaniBangladeshi.txt"
+# covariatesfile = "score_IndianPakistaniBangladeshi/ukb_hypertensiondrug_DBPge100SBPge160_covariates.IndianPakistaniBangladeshi.txt"
+
+# BTfile = "score_IndianPakistaniBangladeshiPC/ukb_hypertensiondrug_DBPge100SBPge160_BT.IndianPakistaniBangladeshiPC.txt"
+# covariatesfile = "score_IndianPakistaniBangladeshiPC/ukb_hypertensiondrug_DBPge100SBPge160_covariates.IndianPakistaniBangladeshiPC.txt"
+
+# BTfile = "score_IndianPakistaniBangladeshiPConlyaffected/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.IndianPakistaniBangladeshiPC.txt"
+# covariatesfile = "score_IndianPakistaniBangladeshiPConlyaffected/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.IndianPakistaniBangladeshiPC.txt"
+
+# BTfile = "../gwas/regenie_hypertensiondrug_DBPge100SBPge160/ukb_hypertensiondrug_DBPge100SBPge160_BT.txt"
+# covariatesfile = "../gwas/regenie_hypertensiondrug_DBPge100SBPge160/ukb_hypertensiondrug_DBPge100SBPge160_covariates.txt"
+
+BTfile = "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_BT.txt"
+covariatesfile = "../gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/ukb_hypertensiondrug_onlyaffectedDBPge100SBPge160_covariates.txt"
+
+t = "C03"
+# t = "C07"
+# t = "C08"
+# t = "C09"
+```
+
+## PGS
+
+Either from genotype:
+
+```{r}
+data = read.table(
+  paste0(
+    # "score_IndianPakistaniBangladeshi/coeff."
+    # "score_IndianPakistaniBangladeshiPC/coeff."
+    "score_IndianPakistaniBangladeshiPConlyaffected/coeff."
+    # "score_lipidaemiadrug_exclsupplement/coeff."
+    # "score_hypertensiondrug_DBPge100SBPge160/coeff."
+    # "score_antihypertensive.SBP/coeff."
+    # "score_antihypertensive.DBP/coeff."
+    # "score_hypolipidemics.LDL/coeff."
+    , t, ".chr1.sscore"), header=TRUE, comment.char="")
+
+for (i in 2:22) {
+  foo = read.table(
+    paste0(
+      # "score_IndianPakistaniBangladeshi/coeff."
+      # "score_IndianPakistaniBangladeshiPC/coeff."
+      "score_IndianPakistaniBangladeshiPConlyaffected/coeff."
+      # "score_lipidaemiadrug_exclsupplement/coeff."
+      # "score_hypertensiondrug_DBPge100SBPge160/coeff."
+      # "score_antihypertensive.SBP/coeff."
+      # "score_antihypertensive.DBP/coeff."
+      # "score_hypolipidemics.LDL/coeff."
+      , t, ".chr", i, ".sscore"), header=TRUE, comment.char="")
+  print(identical(data$X.FID, foo$X.FID))
+  data$SCORE1_SUM = data$SCORE1_SUM + foo$SCORE1_SUM
+}
+
+colnames(data) = c("FID", "pgs")
+```
+
+Or from Data-Field:
+
+```{r}
+foo = data.table::fread("../ukb_subset.StandardPRS.REPLACE.tsv.gz",
+                        header=TRUE, sep="\t")
+# data = foo[, c("eid", "p26242")] #Standard PRS for high density lipoprotein cholesterol (HDL)
+# data[, 2] = - data[, 2]
+data = foo[, c("eid", "p26244")] #Standard PRS for hypertension (HT)
+# data = foo[, c("eid", "p26250")] #Standard PRS for low density lipoprotein cholesterol (LDL_SF)
+colnames(data) = c("FID", "pgs")
+```
+
+
+```{r}
+foo = read.table(
+    BTfile,
+    header=TRUE)
+```
+
+```{r}
+data$trait = factor(foo[match(data$FID, foo$FID), t])
+```
+
+```{r}
+foo = read.table(
+  # "~/final/ukb/SHARMAN_UKBiobankBPtreatment_2502/antihypertensive.SBP.txt",
+  # "~/final/ukb/SHARMAN_UKBiobankBPtreatment_2502/antihypertensive.SBP.actualminbeforestartle120.txt", # Best
+  # "~/final/ukb/SHARMAN_UKBiobankBPtreatment_2502/antihypertensive.SBP.actualminbeforestartle90.txt",
+  # "~/final/ukb/SHARMAN_UKBiobankBPtreatment_2502/antihypertensive.SBP.minafterstart28.actualminbeforestartle90.txt", # Not good
+  # "~/final/ukb/SHARMAN_UKBiobankBPtreatment_2502/antihypertensive.DBP.txt",
+  "~/final/ukb/SHARMAN_UKBiobankBPtreatment_2502/hypolipidemics.LDL.actualminbeforestartle120.txt",
+  header=T)
+drug =
+  # "thiazide"
+# "b-blocker"
+"CCB"
+# "ACEi_ARB"
+  # "statin"
+
+foo = foo[foo$drug==drug, ]
+foo = foo %>% left_join(data, by=c("eid"="FID"))
+data = foo %>% rename(trait = value.delta) %>% na.omit(pgs)
+```
+
+In a0 below, the beta for agec is
+- positive for b-blocker and ACEi_ARB
+- negative for CCB
+
+```{r}
+goo = as.data.frame(
+  data.table::fread(
+    "~/final/ukb/SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
+    na.strings=c("", "NA")))
+
+goo = goo %>%
+  mutate(
+    birth = as.Date(paste(p34, "January", "01"), format = "%Y %B %d") # TODO: add p52 month
+  )
+goo = goo %>% mutate(sexM = (p31=="Male")*1)
+
+data = data %>% left_join(goo[, c("eid", "sexM", "birth")], by="eid")
+
+data = data %>%
+  mutate(age = as.integer(as.Date(start) - birth) / 365.2422) %>%
+  mutate(agec = age - mean(age), agec2 = agec^2)
+
+m = mean(data$trait)
+y = data$trait - m
+a0 = lm(y ~ sexM*agec, data=data, na.action=na.exclude)
+summary(a0)
+output = naresid(a0$na.action, a0$residual)
+data$trait2 = output + m
+```
+
+```{r}
+hoo = as.data.frame(
+  data.table::fread(
+    "~/final/drug_selection/ukb/cohort/ukb_subset.wo20003.REPLACE.tsv.gz",
+    na.strings=c("", "NA")))
+hoo$Caucasian =
+  !is.na(hoo$p22006) &
+  (hoo$p22006 == "Caucasian")
+data = data[hoo$Caucasian[match(data$eid, hoo$eid)], ]
+```
+
+
+```{r}
+data = data[!is.na(data$trait), ]
+data = data[!is.na(data$pgs), ]
+```
+
+```{r}
+data$pgsdecile = cut(data$pgs, quantile(data$pgs, seq(0, 1, 0.1)), include.lowest=TRUE)
+```
+
+```{r}
+table(data$trait)
+```
+
+```{r}
+x = table(data$pgsdecile,data$trait)
+x
+```
+
+```{r}
+x[, 2] / rowSums(x)
+```
+P for AUC > 0.5
+
+```{r}
+x = wilcox.test(data$pgs[data$trait==1], data$pgs[data$trait==0], alternative="greater")
+x
+```
+```{r}
+x$p.value
+```
+
+```{r}
+foo = read.table(
+  covariatesfile,
+  header=TRUE)
+```
+
+```{r}
+data = cbind(data, foo[match(data$FID, foo$FID), -c(1:2)])
+```
+
+```{r}
+colnames(data)
+```
+
+
+
+```{r}
+dataplot = data %>%
+select(pgsdecile, trait) %>%
+na.omit() %>%
+group_by(pgsdecile) %>%
+summarize(proportion = sum(trait=="1") / n(), .groups="drop")
+```
+
+```{r}
+p =
+ggplot(data=dataplot) +
+geom_bar(aes(x=pgsdecile, y=proportion), stat='identity') +
+theme(axis.text.x = element_text(angle=90, hjust=1, vjust=.5)) +
+xlab("Deciles of PGS") +
+ylab("Proportion taking drug") +
+ggtitle(t)
+show(p)
+```
+
+```{r}
+ggsave(p, file="Rplot.pdf")
+```
+
+```{r}
+library("pROC")
+```
+```{r}
+r = roc(response=data$trait, predictor=data$pgs, direction="<")
+r
+```
+```{r}
+plot(r)
+```
+
+# Survival
+
+```{r}
+complicationsfile =
+  "../regenie_lipidaemiadrug_exclsupplement/ukb_lipidaemiadrug_exclsupplement_complications.txt"
+  # "../regenie_hypertensiondrug_DBPge100SBPge160/ukb_hypertensiondrug_DBPge100SBPge160_complications.txt"
+foo = read.table(
+    complicationsfile,
+    header=TRUE, sep="\t")
+for (i in 3:ncol(foo)) {
+  foo[, i] = as.Date(foo[, i])
+}
+
+data = cbind(data, foo[match(data$FID, foo$FID), 3:ncol(foo)])
+```
+
+```{r}
+censoringdate = as.Date("2022-05-31")
+```
+
+```{r}
+primary =
+  "date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814"
+  # "date_i10_first_reported_essential_primary_hypertension_f131286"
+data2 = data[
+  !is.na(data[, primary]) &
+    data[, primary] <= data$date_of_attending_assessment_centre_f53_0,
+]
+```
+
+```{r}
+target =
+  "date_i21_first_reported_acute_myocardial_infarction_f131298"
+  # "date_i63_first_reported_cerebral_infarction_f131366"
+  # "date_n18_first_reported_chronic_renal_failure_f132032"
+data2 = data2[
+  is.na(data2[, target]) |
+    data2[, target] > data2$date_of_attending_assessment_centre_f53_0,
+                          ]
+```
+
+```{r}
+data2$pgsquartile = cut(data2$pgs, quantile(data2$pgs, seq(0, 1, 0.25)), include.lowest=TRUE)
+```
+
+
+```{r}
+maxtime = 3652
+
+data2$time = data2[, target] - data2$date_of_attending_assessment_centre_f53_0
+data2$time[data2$time > maxtime] = NA
+data2$status = !is.na(data2$time)
+
+data2$time[! data2$status] = pmin(censoringdate - data2$date_of_attending_assessment_centre_f53_0[! data2$status], maxtime)
+```
+
+```{r}
+library(survival)
+plot(survfit(Surv(time=data2$time, event=data2$status) ~ data2$pgsquartile),
+     ylim=c(0.9, 1))
+
+```
+
+```{r}
+a0 = coxph(Surv(time=time, event=status) ~ pgsquartile+sexM+age+bmi+agec2+agesexM ,data=data2)
+a0
+a1 = coxph(Surv(time=time, event=status) ~ trait+sexM+age+bmi+agec2+agesexM ,data=data2)
+a1
+a2 = coxph(Surv(time=time, event=status) ~ pgsquartile+trait+sexM+age+bmi+agec2+agesexM ,data=data2)
+a2
+
+coxph(Surv(time=time, event=status) ~ pgsquartile*trait+sexM+age+bmi+agec2+agesexM ,data=data2)
+
+coxph(Surv(time=time, event=status) ~ pgsquartile:trait+sexM+age+bmi+agec2+agesexM ,data=data2)
+```
+
+```{r}
+write.csv(summary(a2)$coefficients, file="~/foo.csv")
+```
+
+
+```{r}
+library(MatchIt)
+
+covariates = c(
+  "date_e10_first_reported_insulindependent_diabetes_mellitus_f130706",
+  "date_e11_first_reported_noninsulindependent_diabetes_mellitus_f130708",
+  "date_e78_first_reported_disorders_of_lipoprotein_metabolism_and_other_lipidaemias_f130814"
+)
+
+covariates =
+setdiff(
+  colnames(data2)[grep("^date", colnames(data2))],
+  c("date_of_attending_assessment_centre_f53_0", primary, target))
+
+covariates =
+  as.data.frame(
+  do.call(
+    cbind,
+    lapply(covariates,
+           function (x) {
+             (! is.na(data2[, x]) &
+                data2[, x] <= data2$date_of_attending_assessment_centre_f53_0) * 1
+           })))
+covariates = cbind(covariates, data2[, c("sexM", "age", "bmi", "agec2", "agesexM")])
+# covariates$trait = data2$trait
+covariates$trait = factor(1 - as.numeric(as.character(data2$trait)))
+
+rownames(covariates) = data2$FID
+covariates = covariates[rowSums(is.na(covariates)) == 0, ]
+
+summary(glm(trait ~ ., data = covariates, family=binomial()))
+
+match_obj <- matchit(trait ~ .,
+                     data = covariates, method = "nearest", distance ="glm",
+                     ratio = 1,
+                     replace = FALSE)
+summary(match_obj)
+```
+
+```{r}
+plot(match_obj, type = "jitter", interactive = FALSE)
+# plot(match_obj)
+# plot(match_obj, type="hist")
+plot(summary(match_obj), abs = FALSE)
+
+ggplot(data=data.frame(
+  treat=match_obj$treat,
+  distance=match_obj$distance),
+  aes(x=distance))+
+  geom_histogram()+
+  facet_wrap(~treat)
+
+#Extract the matched data and save the data into the variable matched_data
+matched_data <- match.data(match_obj)
+
+data2$weights = matched_data$weights[match(data2$FID, rownames(matched_data))]
+data2$subclass = matched_data$subclass[match(data2$FID, rownames(matched_data))]
+
+
+```
+
+
+
+```{r}
+
+
+a0 = coxph(Surv(time=time, event=status) ~ pgsquartile+sexM+age+bmi+agec2+agesexM ,data=data2[!is.na(data2$weights), ])
+a0
+a1 = coxph(Surv(time=time, event=status) ~ trait+sexM+age+bmi+agec2+agesexM ,data=data2[!is.na(data2$weights), ])
+a1
+a2 = coxph(Surv(time=time, event=status) ~ pgsquartile+trait+sexM+age+bmi+agec2+agesexM ,data=data2[!is.na(data2$weights), ])
+a2
+
+res = glm(status ~ pgsquartile+trait+sexM+age+bmi+agec2+agesexM ,data=data2[!is.na(data2$weights), ],
+          family = binomial())
+summary(res)
+
+library(lmtest)
+library(sandwich)
+
+coeftest(res, vcov. = vcovCL, cluster = ~subclass)
+coefci(res, vcov. = vcovCL, cluster = ~subclass, level = 0.95)
+```
+
+```{r}
+coxph(Surv(time=time, event=status) ~ pgsquartile*trait+sexM+age+bmi+agec2+agesexM ,data=data2[!is.na(data2$weights), ])
+
+```
+
+# Drug
+
+```{r}
+summary(lm(trait ~ pgs, data=data))
+```
+
+```{r}
+ggplot(data = data, aes(x=pgs, y=trait)) +
+  geom_point() +
+  geom_smooth(method="loess")
+```
+
+```{r}
+data$pgsquartile = cut(data$pgs, quantile(data$pgs, seq(0, 1, 0.25)), include.lowest=TRUE)
+ggplot(data=data, aes(x=pgsquartile, y=trait)) +
+  geom_boxplot() +
+  xlab(paste0("PGS quartile for ", t)) + ylab(drug)
+```
