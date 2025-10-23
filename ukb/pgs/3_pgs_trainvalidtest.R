@@ -1,5 +1,4 @@
 library(glmnet)
-# library(ridge)
 library(ggplot2)
 library(dplyr)
 library(data.table)
