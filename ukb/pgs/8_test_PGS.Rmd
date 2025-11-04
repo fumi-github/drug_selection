@@ -7,6 +7,8 @@ output: html_notebook
 library(tidyverse)
 ```
 
+# Define phenotype and covariates input files and target phenotype
+
 ```{r}
 # BTfile = "score_IndianPakistaniBangladeshi/ukb_lipidaemiadrug_exclsupplement_BT.IndianPakistaniBangladeshi.txt"
 # covariatesfile = "score_IndianPakistaniBangladeshi/ukb_lipidaemiadrug_exclsupplement_covariates.IndianPakistaniBangladeshi.txt"
@@ -48,7 +50,7 @@ t = "C03"
 # t = "C09"
 ```
 
-## PGS
+# Load PGS
 
 Either from genotype:
 
@@ -96,6 +98,7 @@ data = foo[, c("eid", "p26244")] #Standard PRS for hypertension (HT)
 colnames(data) = c("FID", "pgs")
 ```
 
+# Load phenotype
 
 ```{r}
 foo = read.table(
@@ -158,6 +161,8 @@ output = naresid(a0$na.action, a0$residual)
 data$trait2 = output + m
 ```
 
+# Postprocessing of data
+
 ```{r}
 hoo = as.data.frame(
   data.table::fread(
@@ -191,6 +196,7 @@ x
 ```{r}
 x[, 2] / rowSums(x)
 ```
+
 P for AUC > 0.5
 
 ```{r}
@@ -215,7 +221,7 @@ data = cbind(data, foo[match(data$FID, foo$FID), -c(1:2)])
 colnames(data)
 ```
 
-
+# Plot PGS performance
 
 ```{r}
 dataplot = data %>%
@@ -239,6 +245,8 @@ show(p)
 ```{r}
 ggsave(p, file="Rplot.pdf")
 ```
+
+# Test PGS performance
 
 ```{r}
 library("pROC")
