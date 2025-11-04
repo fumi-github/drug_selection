@@ -150,22 +150,8 @@ In a0 below, the beta for agec is
 - negative for CCB
 
 ```{r}
-goo = as.data.frame(
-  data.table::fread(
-    "~/final/ukb/SHARMAN_UKBiobankLVBP_2307/ukb_subset.txt.gz",
-    na.strings=c("", "NA")))
-
-goo = goo %>%
-  mutate(
-    birth = as.Date(paste(p34, "January", "01"), format = "%Y %B %d") # TODO: add p52 month
-  )
-goo = goo %>% mutate(sexM = (p31=="Male")*1)
-
-data = data %>% left_join(goo[, c("eid", "sexM", "birth")], by="eid")
-
 data = data %>%
-  mutate(age = as.integer(as.Date(start) - birth) / 365.2422) %>%
-  mutate(agec = age - mean(age), agec2 = agec^2)
+  mutate(agec = age - mean(age))
 
 m = mean(data$trait)
 y = data$trait - m
