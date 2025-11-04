@@ -197,16 +197,6 @@ x
 x[, 2] / rowSums(x)
 ```
 
-P for AUC > 0.5
-
-```{r}
-x = wilcox.test(data$pgs[data$trait==1], data$pgs[data$trait==0], alternative="greater")
-x
-```
-```{r}
-x$p.value
-```
-
 ```{r}
 foo = read.table(
   covariatesfile,
@@ -247,6 +237,17 @@ ggsave(p, file="Rplot.pdf")
 ```
 
 # Test PGS performance
+
+P for AUC > 0.5
+
+```{r}
+x = wilcox.test(data$pgs[data$trait==1], data$pgs[data$trait==0], alternative="greater")
+x
+```
+
+```{r}
+x$p.value
+```
 
 ```{r}
 library("pROC")
