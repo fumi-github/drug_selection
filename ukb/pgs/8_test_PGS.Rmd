@@ -161,6 +161,20 @@ output = naresid(a0$na.action, a0$residual)
 data$trait2 = output + m
 ```
 
+```{r}
+foo = read.table(
+  covariatesfile,
+  header=TRUE)
+```
+
+```{r}
+data = cbind(data, foo[match(data$FID, foo$FID), -c(1:2)])
+```
+
+```{r}
+colnames(data)
+```
+
 # Postprocessing of data
 
 ```{r}
@@ -195,20 +209,6 @@ x
 
 ```{r}
 x[, 2] / rowSums(x)
-```
-
-```{r}
-foo = read.table(
-  covariatesfile,
-  header=TRUE)
-```
-
-```{r}
-data = cbind(data, foo[match(data$FID, foo$FID), -c(1:2)])
-```
-
-```{r}
-colnames(data)
 ```
 
 # Plot PGS performance
