@@ -38,7 +38,7 @@ For each script, I and O are input and output files provided in this git reposit
 - aou/hypertension_srWGS_C07.ipynb
 - aou/hypertension_srWGS_C08.ipynb
 - aou/hypertension_srWGS_C09.ipynb
-	- O*: Dump drug prescription series (AoU)
+	- O*: Drug prescription series (AoU)
 - aou/1_rsAminAmax.R
 	- I*: GWAS summary statistics
 	- O*: GWAS summary statistics (with universal SNP ID rsAminAmax for meta-analysis)
@@ -121,4 +121,4 @@ For each script, I and O are input and output files provided in this git reposit
 - aou/hypertension_srWGS_C07.ipynb
 - aou/hypertension_srWGS_C08.ipynb
 - aou/hypertension_srWGS_C09.ipynb
-	- O*: Dump drug choice data (AoU)
+	- O*: Drug choice data (AoU)
