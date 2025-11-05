@@ -93,8 +93,8 @@ For each script, I and O are input and output files provided in this git reposit
 	-  I: ukb/pgs/coeff/coeff*.txt
 	-  I*: Genotype file for whole genome
 	-  I*: Phenotype file
-	-  O*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.*.chr*.sscore
+	-  O*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore
 -  ukb/pgs/8_test_PGS.Rmd
-	-  I*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.*.chr*.sscore
+	-  I*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore
 	-  I*: Phenotype file, Covariate file
 	-  O*: Figure 3, right panels
