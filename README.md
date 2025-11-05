@@ -1,0 +1,100 @@
+For each script, I and O are input and output files provided in this git repository and I* and O* are not provided (involving individual-level data).
+## GWAS for drug response
+- ukb/drugresponse/1_combine_drug_observation.Rmd
+	- I*: Drug prescription series
+	- I*: Laboratory measurements
+	- O*: Trios of drug prescription series, baseline and on-drug biomarker levels
+- ukb/drugresponse/2_final_reformatting_regenie.Rmd
+	- I*: Trios of drug prescription series, baseline and on-drug biomarker levels
+	- O*: Phenotype file, Covariate file
+	- O*: Figure 1C
+- ukb/gwas/1_exclusionfiles.sh
+	- I*: Genotype file
+	- O*: QC file for REGENIE step 1
+- ukb/gwas/regenie_hypolipidemics.LDLdelta.minafterstart28.wpower1/2_regenie_step1.sh
+- ukb/gwas/regenie_hypolipidemics.LDLdelta.minafterstart28.wpower1/3_regenie_step2.template.sh
+	- I*: Genotype file, Phenotype file, Covariate file, QC file
+	- O*: GWAS summary statistics
+- ukb/gwas/regenie_hypolipidemics.LDLlogratio.minafterstart28.wpower1/2_regenie_step1.sh
+- ukb/gwas/regenie_hypolipidemics.LDLlogratio.minafterstart28.wpower1/3_regenie_step2.template.sh
+	- I*: Genotype file, Phenotype file, Covariate file, QC file
+	- O*: GWAS summary statistics
+- ukb/gwas/regenie_hypolipidemics.LDLmyboxcoxv2.minafterstart28.wpower1/2_regenie_step1.sh
+- ukb/gwas/regenie_hypolipidemics.LDLmyboxcoxv2.minafterstart28.wpower1/3_regenie_step2.template.sh
+	- I*: Genotype file, Phenotype file, Covariate file, QC file
+	- O*: GWAS summary statistics
+- ukb/gwas/regenie_antihypertensive.SBPmyboxcoxv2.minafterstart28.wpower1/2_regenie_step1.sh
+- ukb/gwas/regenie_antihypertensive.SBPmyboxcoxv2.minafterstart28.wpower1/3_regenie_step2.template.sh
+	- I*: Genotype file, Phenotype file, Covariate file, QC file
+	- O*: GWAS summary statistics
+- aou/1_rsAminAmax.R
+	- I*: GWAS summary statistics
+	- O*: GWAS summary statistics (with universal SNP ID rsAminAmax for meta-analysis)
+- ukbaou/metal/1_metal.sh
+	- I*: GWAS summary statistics for UKB and AoU
+	- O*: GWAS summary statistics after meta-analysis (to be submitted to GWAS catalog)
+- ukbaou/metal/2_manhattan.R
+	- I*: GWAS summary statistics
+	- O*: Figure 1A, 1B
+	- O*: Figure S1
+## GWAS for drug choice
+- ukb/cohort/1_definecohort.Rmd
+	- O*: Phenotype file, Covariate file
+- ukb/gwas/1_exclusionfiles.sh
+	- I*: Genotype file
+	- O*: QC file for REGENIE step 1
+- ukb/gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/2_regenie_step1.sh
+- ukb/gwas/regenie_lipidaemiadrug_onlyaffectedexclsupplement/3_regenie_step2.template.sh
+	- I*: Genotype file, Phenotype file, Covariate file, QC file
+	- O*: GWAS summary statistics (to be submitted to GWAS catalog)
+- ukb/gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/2_regenie_step1.sh
+- ukb/gwas/regenie_hypertensiondrug_onlyaffectedDBPge100SBPge160/3_regenie_step2.template.sh
+	- I*: Genotype file, Phenotype file, Covariate file, QC file
+	- O*: GWAS summary statistics (to be submitted to GWAS catalog)
+- ukb/gwas/plink_lipidaemiadrug_onlyaffectedexclsupplement/script.template.sh
+- ukb/gwas/plink_lipidaemiadrug_onlyaffectedexclsupplement/script_combine.sh
+	- I*: Genotype file, Phenotype file, Covariate file
+	- O*: GWAS summary statistics
+- ukb/gwas/plink_hypertensiondrug_onlyaffectedDBPge100SBPge160/script.template.sh
+- ukb/gwas/plink_hypertensiondrug_onlyaffectedDBPge100SBPge160/script_combine.sh
+	- I*: Genotype file, Phenotype file, Covariate file
+	- O*: GWAS summary statistics
+- ldsc/1_summary.R
+	- I*: ldsc processed GWAS summary statistics
+	- O*: Figure 2
+## PGS for drug choice
+- ukb/pgs/1_extract_gwas_snps_ukb_aou.R
+	- O: snps_ukb_aou.txt
+	- O: snps_rs.chr*.txt
+	- O: snps_rs_allele.chr*.txt
+- ukb/pgs/2_extract_snps.template.sh
+	- I: snps_rs.chr*.txt
+	- I: snps_rs_allele.chr*.txt
+	- I*: Genotype file for whole genome
+	- O*: Genotype file for PGS SNPs
+- ukb/pgs/3_pgs_trainvalidtest.R
+	- I*: Genotype file for PGS SNPs
+	- I*: Phenotype file, Covariates file
+	- O: ukb/pgs/aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.*.rds
+	- O: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
+- ukb/pgs/4_choose_hyperparameter.R
+	- I: ukb/pgs/aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.*.rds
+	- I: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
+- ukb/pgs/5_write_pgs_coeff.R
+	- I: ukb/pgs/aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.*.rds
+	- I: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
+	- O: ukb/pgs/coeff/coeff*.txt
+- ukb/pgs/6_summarize_test.R
+	- I: ukb/pgs/aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.*.rds
+	- I: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
+	- O*: Figure 3, left panels
+	- O*: Figure S2
+-  ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/7_score.template.sh
+	-  I: ukb/pgs/coeff/coeff*.txt
+	-  I*: Genotype file for whole genome
+	-  I*: Phenotype file
+	-  O*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.*.chr*.sscore
+-  ukb/pgs/8_test_PGS.Rmd
+	-  I*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.*.chr*.sscore
+	-  I*: Phenotype file, Covariate file
+	-  O*: Figure 3, right panels
