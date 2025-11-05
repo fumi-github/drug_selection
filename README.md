@@ -27,6 +27,18 @@ For each script, I and O are input and output files provided in this git reposit
 - ukb/gwas/regenie_antihypertensive.SBPmyboxcoxv2.minafterstart28.wpower1/3_regenie_step2.template.sh
 	- I*: Genotype file, Phenotype file, Covariate file, QC file
 	- O*: GWAS summary statistics
+- aou/lipidaemia_srWGS_C10AAwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10ABwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10ACwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10ADwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10AX06withC10B.ipynb
+- aou/lipidaemia_srWGS_C10AX09withC10B.ipynb
+- aou/hypertension_srWGS_C02.ipynb
+- aou/hypertension_srWGS_C03.ipynb
+- aou/hypertension_srWGS_C07.ipynb
+- aou/hypertension_srWGS_C08.ipynb
+- aou/hypertension_srWGS_C09.ipynb
+	- O*: Dump drug prescription series (AoU)
 - aou/1_rsAminAmax.R
 	- I*: GWAS summary statistics
 	- O*: GWAS summary statistics (with universal SNP ID rsAminAmax for meta-analysis)
@@ -89,12 +101,24 @@ For each script, I and O are input and output files provided in this git reposit
 	- I: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
 	- O*: Figure 3, left panels
 	- O*: Figure S2
--  ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/7_score.template.sh
+- ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/7_score.template.sh
 	-  I: ukb/pgs/coeff/coeff*.txt
 	-  I*: Genotype file for whole genome
 	-  I*: Phenotype file
 	-  O*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore
--  ukb/pgs/8_test_PGS.Rmd
+- ukb/pgs/8_test_PGS.Rmd
 	-  I*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore
 	-  I*: Phenotype file, Covariate file
 	-  O*: Figure 3, right panels
+- aou/lipidaemia_srWGS_C10AAwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10ABwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10ACwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10ADwithC10B.ipynb
+- aou/lipidaemia_srWGS_C10AX06withC10B.ipynb
+- aou/lipidaemia_srWGS_C10AX09withC10B.ipynb
+- aou/hypertension_srWGS_C02.ipynb
+- aou/hypertension_srWGS_C03.ipynb
+- aou/hypertension_srWGS_C07.ipynb
+- aou/hypertension_srWGS_C08.ipynb
+- aou/hypertension_srWGS_C09.ipynb
+	- O*: Dump drug choice data (AoU)
