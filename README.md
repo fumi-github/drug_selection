@@ -38,8 +38,20 @@ For each script, I and O are input and output files provided in this git reposit
 - aou/hypertension_srWGS_C07.ipynb
 - aou/hypertension_srWGS_C08.ipynb
 - aou/hypertension_srWGS_C09.ipynb
-	- O*: Drug prescription series (AoU)
-- aou/1_rsAminAmax.R
+	- O*: Drug prescription series
+- aou/1_combine_drug_observation.ipynb	
+	- I*: Drug prescription series
+	- I*: Laboratory measurements
+	- O*: Trios of drug prescription series, baseline and on-drug biomarker levels
+- aou/2_final_reformatting_regenie_BPvariability.ipynb
+	- I*: Trios of drug prescription series, baseline and on-drug biomarker levels
+	- O*: Phenotype file, Covariate file
+	- O*: Figure 1D
+- aou/3_dsub.ipynb
+- aou/4_monitor_cloud_analysis_environment.ipynb
+	- I*: Phenotype file, Covariate file
+	- O*: GWAS summary statistics
+- aou/6_rsAminAmax.R
 	- I*: GWAS summary statistics
 	- O*: GWAS summary statistics (with universal SNP ID rsAminAmax for meta-analysis)
 - ukbaou/metal/1_metal.sh
@@ -95,19 +107,19 @@ For each script, I and O are input and output files provided in this git reposit
 - ukb/pgs/5_write_pgs_coeff.R
 	- I: ukb/pgs/aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.*.rds
 	- I: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
-	- O: ukb/pgs/coeff/coeff*.txt
+	- O: ukb/pgs/coeff/coeff.*.txt
 - ukb/pgs/6_summarize_test.R
 	- I: ukb/pgs/aucR2ROC_lipidaemiadrug_onlyaffectedexclsupplement/auc.*.rds
 	- I: ukb/pgs/aucR2ROC_hypertensiondrug_onlyaffectedDBPge100SBPge160/auc.*.rds
 	- O*: Figure 3, left panels
 	- O*: Figure S2
 - ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/7_score.template.sh
-	-  I: ukb/pgs/coeff/coeff*.txt
+	-  I: ukb/pgs/coeff/coeff.*.txt
 	-  I*: Genotype file for whole genome
 	-  I*: Phenotype file
-	-  O*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore
+	-  O*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore (PGS)
 - ukb/pgs/8_test_PGS.Rmd
-	-  I*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore
+	-  I*: ukb/pgs/score_IndianPakistaniBangladeshiPConlyaffected/coeff.\*.chr\*.sscore (PGS)
 	-  I*: Phenotype file, Covariate file
 	-  O*: Figure 3, right panels
 - aou/lipidaemia_srWGS_C10AAwithC10B.ipynb
@@ -121,4 +133,15 @@ For each script, I and O are input and output files provided in this git reposit
 - aou/hypertension_srWGS_C07.ipynb
 - aou/hypertension_srWGS_C08.ipynb
 - aou/hypertension_srWGS_C09.ipynb
-	- O*: Drug choice data (AoU)
+	- O*: Drug choice data
+- aou/2_final_reformatting_regenie_BPvariability.ipynb
+	- I*: Drug choice data
+	- O*: Phenotype file, Covariate file
+- aou/3_dsub.ipynb
+- aou/4_monitor_cloud_analysis_environment.ipynb
+	- I: ukb/pgs/coeff/coeff.*.hg38.txt
+	- I*: Phenotype file, Covariate file
+	- O*: score.\*.chr\*.sscore (PGS)
+- aou/5_test_PGS.ipynb
+	- I*: score.\*.chr\*.sscore (PGS)
+	- O*: Figure 3, middle panels
