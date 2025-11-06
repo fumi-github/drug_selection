@@ -39,6 +39,9 @@ For each script, I and O are input and output files provided in this git reposit
 - aou/hypertension_srWGS_C08.ipynb
 - aou/hypertension_srWGS_C09.ipynb
 	- O*: Drug prescription series
+- aou/HDLLDL_srWGS.ipynb
+- aou/DBPSBP_srWGS.ipynb
+	- O*: Laboratory measurements
 - aou/1_combine_drug_observation.ipynb	
 	- I*: Drug prescription series
 	- I*: Laboratory measurements
