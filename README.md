@@ -1,5 +1,13 @@
 For each script, I and O are input and output files provided in this git repository and I* and O* are not provided (involving individual-level data).
 ## GWAS for drug response
+- ukb/drugresponse/gp_scripts.ipynb
+	- I: ukb/drugresponse/bnf/bnf_*.txt
+	- I: ukb/drugresponse/dmd/dmd_*.txt
+	- I: ukb/drugresponse/read_2/read_2_*.txt
+	- O*: Drug prescriptions
+- ukb/drugresponse/gp_clinical.ipynb
+	- I: ukb/drugresponse/read_2/read_2_*.txt
+	- O*: Laboratory measurements
 - ukb/drugresponse/1_combine_drug_observation.Rmd
 	- I*: Drug prescription series
 	- I*: Laboratory measurements
