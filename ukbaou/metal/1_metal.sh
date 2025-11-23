@@ -90,18 +90,6 @@ f2=../../aou/regenie_hypolipidemics.LDLlogratio/${t}/aou_hypolipidemics.LDLlogra
 # f1=../../ukb/gwas/regenie_antihypertensive.SBPmyboxcoxv2.minafterstart28.wpower1/ukb_antihypertensive.SBPmyboxcoxv2_step2_QT_chrall_ACEi_ARB.regenie.rs.100x
 # f2=../../aou/regenie_antihypertensive.SBPmyboxcoxv2/${t}/aou_antihypertensive.SBPmyboxcoxv2_step2_out_chrall_${t}.regenie.rs.100x.geno01maf001mac0hwedev02
 
-# t=SBPnodrugmyboxcox_s
-# f1=../../ukb/gwas/regenie_SBPnodrugpartialmyboxcox-04nge4/ukb_SBPnodrugpartialmyboxcox-04nge4_step2_QT_chrall_s.regenie.rs
-# f2=../../aou/regenie_SBPnodrugmyboxcox-05nge4/s/aou_SBPnodrugmyboxcox-05nge4_step2_out_chrall_s.regenie.rs
-
-# t=MAPnodrugmyboxcox_s.100x
-# f1=../../ukb/gwas/regenie_MAPnodrugpartialmyboxcox-02nge4/ukb_MAPnodrugpartialmyboxcox-02nge4_step2_QT_chrall_s.regenie.rs.100x
-# f2=../../aou/regenie_MAPnodrugmyboxcox0nge4/s/aou_MAPnodrugmyboxcox0nge4_step2_out_chrall_s.regenie.rs.100x
-
-# t=MAPinstance0myboxcox_s.100x
-# f1=../../ukb/gwas/regenie_MAPinstance0myboxcox01nge2/ukb_MAPinstance0myboxcox01nge2_step2_QT_chrall_s.regenie.rs.100x
-# f2=../../ofh/plink_MAPclinicmyboxcox-01nge2/ofh_snv.v8.chrall-ball.s.glm.linear.ADD.rs.100x
-
 # outfile=${t}
 # outfile=${t}.myboxcox
 # outfile=${t}.myboxcox01
