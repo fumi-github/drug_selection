@@ -1,0 +1,432 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+2025.05.29 next_expected_data changed to next_expected_date but not saved.
+
+```{r}
+library(tidyverse)
+```
+
+## Load and preprocess
+
+```{r}
+drug =
+  # "thiazide"
+  # "b-blocker"
+  # "ACEi"
+  # "ARB"
+  "CCB"
+  # "ezetimibe"
+  # "fibrate"
+  # "statin"
+  # "biguanide"
+  # "sulfonylurea" #UNCHANGED
+  # "thiazolidinedione"
+  # "antidiabetic_drugs_excl_biguanide_sulfonylurea"
+  # "insulin"
+  # "bileacidsequestrant"
+  # "nicotinicacid"
+  # "omega3"
+
+data = readr::read_tsv(paste0(drug, ".txt.gz"))
+summary(data)
+```
+
+QC of issue_date
+
+https://biobank.ndph.ox.ac.uk/showcase/exinfo.cgi?src=Data_providers_and_dates
+
+N.B.
+where clinical event or prescription date precedes participant date of birth it has been altered to 01/01/1901.
+Where the date matches participant date of birth it has been altered to 02/02/1902.
+Where the date follows participant date of birth but is in the year of their birth it has been altered to 03/03/1903.
+Where the date was in the future this has been changed to 07/07/2037 as these are likely to have been entered as a place-holder or other system default.
+
+```{r}
+censoringdateleft  = as.Date("1938-01-01")
+censoringdateright = as.Date("2017-08-31")
+sum(is.na(data$issue_date))
+sum(data$issue_date < censoringdateleft,  na.rm=TRUE)
+sum(data$issue_date > censoringdateright, na.rm=TRUE)
+data = data[
+  !is.na(data$issue_date) &
+    data$issue_date >= censoringdateleft &
+    data$issue_date <= censoringdateright, ]
+summary(data)
+```
+
+```{r}
+table(!is.na(data$read_2), !is.na(data$bnf_code), !is.na(data$dmd_code))
+```
+
+```{r}
+x = !is.na(data$read_2) & is.na(data$bnf_code) & is.na(data$dmd_code)
+sum(x)
+head(data[x, ])
+```
+
+```{r}
+x = is.na(data$read_2) & !is.na(data$bnf_code) & is.na(data$dmd_code)
+sum(x)
+head(data[x, ])
+```
+
+```{r}
+x = is.na(data$read_2) & is.na(data$bnf_code) & !is.na(data$dmd_code)
+sum(x)
+head(data[x, ])
+```
+
+```{r}
+nrow(data)
+length(unique(data$eid))
+```
+
+## Define unified drug code
+
+```{r}
+data$code =
+  ifelse(
+    !is.na(data$bnf_code),
+    paste0("bnf_code ", data$bnf_code),
+    ifelse(
+      !is.na(data$read_2),
+      paste0("read_2 ", data$read_2),
+      paste0("dmd_code ", data$dmd_code)))
+```
+
+```{r}
+x = data %>%
+  group_by(eid, code, drug_name) %>%
+  summarize(n = n(), .groups="drop")
+nrow(x)
+summary(x)
+```
+
+```{r}
+y = x[x$n == max(x$n), ]
+data[data$eid==y$eid[1] & data$code==y$code[1], ]
+```
+
+No obvious cutoff.
+
+```{r}
+plot(log10(sort(x$n)))
+```
+
+## Define issue_date_interval; time to next prescription
+
+```{r}
+data = data %>%
+  group_by(eid, code, drug_name) %>%
+  arrange(issue_date) %>%
+  mutate(issue_date_interval = lead(issue_date) - issue_date)
+```
+
+```{r}
+saveRDS(data, file=paste0(drug, ".rds"))
+```
+
+```{r}
+data = readRDS(paste0(drug, ".rds"))
+```
+
+## Convert quantity (text) to total_units (numeric)
+
+```{r}
+source("calculate_total_units.R")
+```
+
+```{r}
+x = sort(unique(data$quantity))
+y = lapply(x, calculate_total_units)
+foo = data.frame(quantity = x, total_units = unlist(y))
+```
+
+```{r}
+data = left_join(x=data, y=foo)
+```
+
+```{r}
+mean(! is.na(data$total_units)) / mean(! is.na(data$quantity))
+mean(data$total_units <= 0, na.rm=TRUE)
+data$total_units[data$total_units <= 0] = NA
+summary(data$total_units)
+```
+
+```{r}
+ggplot(
+  data = data.frame(
+    x = seq(0, 1, 0.001),
+    y = quantile(data$total_units, seq(0, 1, 0.001), na.rm=TRUE))) +
+  geom_hline(yintercept=c(7,28,56,84,112,168, 224,336), color='blue') +
+  geom_point(aes(x = x, y = y), size=0.5) +
+  scale_y_log10() +
+  xlab("Quantile") +
+  ylab("total_units (blue: 7,28,56,84,112,168)")
+```
+
+```{r}
+if (drug %in% c("omega3")) {
+  data$total_units[data$total_units > 600] = NA
+} else {
+  if (drug %in% c("bileacidsequestrant")) {
+    data$total_units[data$total_units > 360] = NA
+  } else {
+    if (drug %in% c("nicotinicacid", "biguanide", "sulfonylurea")) {
+      data$total_units[data$total_units > 336] = NA
+    } else {
+      data$total_units[data$total_units > 180] = NA
+    }
+  }
+}
+
+summary(data$total_units)
+```
+
+## Inspect issue_date_interval 
+
+For insulin, 28 and 56 are frequent.
+
+```{r}
+sum(is.na(data$issue_date_interval)) # one per eid : code
+sum(data$issue_date_interval==0, na.rm=TRUE)
+summary(as.numeric(data$issue_date_interval, units="days"))
+ggplot(
+  data = data.frame(
+    x = seq(0, 1, 0.001),
+    y = quantile(as.numeric(data$issue_date_interval, units="days"), seq(0, 1, 0.001), na.rm=TRUE))) +
+  geom_hline(yintercept=c(7,28,56,84), color='blue') +
+  geom_point(aes(x = x, y = y), size=0.5) +
+  scale_y_log10() +
+  xlab("Quantile") +
+  ylab("issue_date interval (blue: 7,28,56,84)")
+```
+
+## Plot issue_date_interval vs total_units; compute daily_units, next_expected_date
+
+```{r}
+ggplot(
+  data=data,
+  aes(x=as.numeric(issue_date_interval, units="days"), y=total_units)) +
+  # geom_bin2d(bins=50) +
+  stat_bin_2d(aes(fill = after_stat(log10(count))), bins=50) +
+  scale_fill_viridis_c() +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_abline(slope=1, intercept=0, color='red', alpha=0.75) +
+  geom_abline(slope=1, intercept=log10(2), color='brown', alpha=0.75) +
+  geom_abline(slope=1, intercept=log10(3), color='red', alpha=0.75) +
+  geom_abline(slope=1, intercept=log10(4), color='red', alpha=0.75) +
+  xlab("issue_date_interval [days]")
+```
+
+!!! TODO !!!
+NEW daily_units
+
+```{r}
+# data$daily_units = ifelse(
+#   data$total_units / as.numeric(data$issue_date_interval, units="days") > sqrt(2), 2, 1)
+
+data$daily_units = ifelse(
+  is.na(data$total_units),
+  NA,
+  ifelse(
+    is.na(data$issue_date_interval),
+    1,
+    ifelse(
+      (drug %in% c("bileacidsequestrant")) &
+        data$issue_date_interval > 0 &
+        data$total_units / as.numeric(data$issue_date_interval, units="days") > sqrt(6*5) &
+        data$total_units %% 6 == 0,
+      6,
+      ifelse(
+        (drug %in% c("bileacidsequestrant")) &
+          data$issue_date_interval > 0 &
+          data$total_units / as.numeric(data$issue_date_interval, units="days") > sqrt(5*4) &
+          data$total_units %% 5 == 0,
+        5,
+        ifelse(
+          (drug %in% c("bileacidsequestrant", "nicotinicacid", "omega3", "biguanide", "sulfonylurea")) &
+            data$issue_date_interval > 0 &
+            data$total_units / as.numeric(data$issue_date_interval, units="days") > sqrt(4*3) &
+            data$total_units %% 4 == 0,
+          4,
+          ifelse(
+            data$issue_date_interval > 0 &
+              data$total_units / as.numeric(data$issue_date_interval, units="days") > sqrt(3*2) &
+              data$total_units %% 3 == 0,
+            3,
+            ifelse(
+              data$issue_date_interval > 0 &
+                data$total_units / as.numeric(data$issue_date_interval, units="days") > sqrt(2) &
+                data$total_units %% 2 == 0,
+              2,
+              1)))))))
+  
+data$next_expected_date = data$issue_date + data$total_units / data$daily_units
+```
+
+QUICK DIRTY SOLUTION FOR insulin
+
+```{r}
+if (drug=="insulin") {
+  data$next_expected_date = data$issue_date + 84
+}
+```
+
+```{r}
+ggplot(
+  data=data,
+  aes(x=as.numeric(issue_date_interval, units="days"), y=total_units)) +
+  geom_point(aes(color=factor(daily_units)), size=0.5, alpha=0.5) +
+  scale_fill_viridis_c() +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_abline(slope=1, intercept=0, color='red') +
+  geom_abline(slope=1, intercept=log10(2), color='brown') +
+  geom_abline(slope=1, intercept=log10(3), color='red') +
+  geom_abline(slope=1, intercept=log10(4), color='red') +
+  xlab("issue_date_interval [days]")
+```
+
+```{r}
+x = data %>%
+  filter(sum(!is.na(daily_units)) >= 5) %>%
+  summarize(n=n(), sd = sd(daily_units, na.rm=TRUE), .groups='drop') %>%
+  slice_max(sd, n=10)
+x
+```
+
+```{r}
+i=1
+data[data$eid==x$eid[1] & data$code==x$code[1], ]
+```
+
+## Convert drug_name (text) to drug_name_brand (text) and drug_name_mg (numeric)
+
+TODO: micrograms, mcg for stain
+metformin 1 g modified-release tablets
+g gram for bileacidsequestrant omega3
+
+```{r}
+source("parse_drug_name.R")
+```
+
+```{r}
+x = sort(unique(data$drug_name))
+y = do.call(rbind, lapply(x, parse_drug_name))
+colnames(y) = c("drug_name_brand", "drug_name_mg")
+foo = cbind(data.frame(drug_name = x), y)
+summary(foo$drug_name_mg)
+```
+
+```{r}
+data = left_join(x=data, y=foo)
+```
+
+```{r}
+mean(! is.na(data$drug_name_mg))
+table(! is.na(data$drug_name_mg), ! is.na(data$daily_units))
+```
+
+## Define daily_mg
+
+```{r}
+data$daily_mg = data$drug_name_mg * data$daily_units
+mean(!is.na(data$daily_mg))
+summary(data$daily_mg)
+```
+
+Below actually only chooses large SD w.r.t. daily_units, because drug_name_mg is constant in a group.
+
+```{r}
+x = data %>%
+  filter(sum(!is.na(daily_mg)) >= 5) %>%
+  summarize(n=n(), sd = sd(daily_mg, na.rm=TRUE), .groups='drop') %>%
+  slice_max(sd, n=10)
+x
+```
+
+```{r}
+i=1
+data[data$eid==x$eid[1] & data$code==x$code[1], ]
+```
+
+
+```{r}
+saveRDS(data, file=paste0(drug, ".2.rds"))
+```
+
+```{r}
+data = readRDS(paste0(drug, ".2.rds"))
+
+data = rbind(
+  readRDS("ACEi.2.rds"),
+  readRDS("ARB.2.rds")
+)
+```
+
+```{r}
+min(data$total_units, na.rm=TRUE) > 0
+max(data$total_units, na.rm=TRUE) <= 180
+max(data$total_units, na.rm=TRUE) <= 336
+```
+
+## Combine consecutive prescriptions into a series (episode)
+
+```{r}
+data = data %>%
+  ungroup() %>%
+  drop_na(next_expected_date) %>%
+  group_by(eid) %>%
+  arrange(issue_date, next_expected_date) %>%
+  # mutate(drug_free_preceding = issue_date - lag(next_expected_date))
+  mutate(drug_free_preceding = as.numeric(issue_date) - cummax(lag(as.numeric(next_expected_date), default=-Inf))) #2025.06.27
+```
+
+Half (median) prescribed at exact renewal data.
+This shows that our calculation of next_expected_date (and daily_units) is reasonable.
+No clear cutoff for intermittence -> arbitrarily set to 14 days
+
+```{r}
+# sum(is.na(data$drug_free_preceding)) # one per eid
+sum(data$drug_free_preceding==Inf) # one per eid
+summary(data$drug_free_preceding)
+ggplot(
+  data = data.frame(
+    x = seq(0, 1, 0.001),
+    y = quantile(as.numeric(data$drug_free_preceding, units="days"), seq(0, 1, 0.001), na.rm=TRUE))) +
+  geom_point(aes(x = x, y = y), size=0.5) +
+  geom_hline(yintercept=c(7,14,28), color='blue') +
+  ylim(-200, 200) +
+  xlab("Quantile") +
+  ylab("drug_free_preceding (blue: 7,14,28)")
+```
+
+```{r}
+data
+```
+
+```{r}
+data = data %>%
+  mutate(new_flag = is.na(drug_free_preceding) | (drug_free_preceding > 14)) %>%
+  mutate(scriptseries = cumsum(new_flag))
+```
+
+```{r}
+scriptseries = data %>%
+  group_by(eid, scriptseries) %>%
+  summarize(eid=min(eid), start=min(issue_date), stop=max(next_expected_date), .groups="drop")
+```
+
+```{r}
+scriptseries
+```
+
+```{r}
+saveRDS(scriptseries, file=paste0("scriptseries.", drug, ".rds"))
+```
+
