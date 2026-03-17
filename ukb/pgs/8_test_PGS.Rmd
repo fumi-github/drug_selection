@@ -89,7 +89,7 @@ colnames(data) = c("FID", "pgs")
 Or from Data-Field:
 
 ```{r}
-foo = data.table::fread("../ukb_subset.StandardPRS.REPLACE.tsv.gz",
+foo = data.table::fread("../cohort/ukb_subset.StandardPRS.REPLACE.tsv.gz",
                         header=TRUE, sep="\t")
 # data = foo[, c("eid", "p26242")] #Standard PRS for high density lipoprotein cholesterol (HDL)
 # data[, 2] = - data[, 2]
