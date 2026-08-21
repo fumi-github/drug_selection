@@ -8,29 +8,33 @@ data = data.table::fread(
   # "C10AA.delta.SAMPLESIZE_1.tbl" # DON'T USE SAMPLESIZE; ignore heterogeneity
   # "C10AA.logratio.SAMPLESIZE_1.tbl"
   # "C10AA.myboxcox01.SAMPLESIZE_1.tbl"
-  "geno01maf001mac0hwedev02/C10AA.delta_1.tbl"
-  # "geno01maf001mac0hwedev02/C10AA.logratio.100x_1.tbl"
+  cmd = "xzcat geno01maf001mac0hwedev02/C10AA.delta_1.tbl.xz"
+  # cmd = "xzcat geno01maf001mac0hwedev02/C10AA.logratio.100x_1.tbl.xz"
   # "geno01maf001mac0hwedev02/C10AA.myboxcoxv2.100x_1.tbl"
   # "geno01maf001mac0hwedev02/C03.myboxcoxv2.100x_1.tbl"
   # "geno01maf001mac0hwedev02/C07.myboxcoxv2.100x_1.tbl"
   # "geno01maf001mac0hwedev02/C08.myboxcoxv2.100x_1.tbl"
   # "geno01maf001mac0hwedev02/C09.myboxcoxv2.100x_1.tbl"
+  # "bleeding.t2e_1.tbl.HetDf1.ChrPos.gz"
 )
 data <- data %>%
-  rename(rsAminAmax = MarkerName,
-         P = `P-value`) %>%
+  rename(
+    rsAminAmax = MarkerName,
+    # chrposAminAmax = MarkerName,
+    P = `P-value`) %>%
   mutate(Allele1 = toupper(Allele1),
          Allele2 = toupper(Allele2),
          Z = Effect / StdErr,
          ALLELEMINOR = ifelse(Freq1 < 0.5, Allele1, Allele2),
          ZMINOR = ifelse(ALLELEMINOR == Allele1, Z, -Z),
          significant = P < 5 * 10^-8) %>%
-  filter(HetDf == 1)
+  filter(HetDf >= 1)
 
 ukb = data.table::fread(
 "../../ukb/gwas/regenie_hypolipidemics.LDLdelta.minafterstart28.wpower1/ukb_hypolipidemics.LDLdelta_step2_QT_chrall_statin.regenie.rs"
 # "../../ukb/gwas/regenie_hypolipidemics.LDLlogratio.minafterstart28.wpower1/ukb_hypolipidemics.LDLlogratio_step2_QT_chrall_statin.regenie.rs"
 # "../../ukb/gwas/regenie_hypolipidemics.LDLmyboxcox01.minafterstart28.wpower1/ukb_hypolipidemics.LDLmyboxcox01_step2_QT_chrall_statin.regenie.rs"
+# "../../ukb/gwas/regenie_bleeding.t2e/bleeding_step2_out_chrall_age.regenie.chrpos.geno01maf0001mac20hwedev02"
 )
 ukb <- ukb %>%
   mutate(P = 10^(-LOG10P),
@@ -39,7 +43,7 @@ ukb <- ukb %>%
          ZMINOR = ifelse(ALLELEMINOR == ALLELE1, Z, -Z),
          significant = P < 5 * 10^-8)
 
-glgc = data.table::fread("jointGwasMc_LDL.txt.gz")
+glgc = data.table::fread(cmd = "xzcat jointGwasMc_LDL.txt.xz")
 glgc <- glgc %>%
   mutate(A1 = toupper(A1),
          A2 = toupper(A2),
@@ -53,6 +57,16 @@ glgc <- glgc %>%
 glgc <- glgc %>%
   filter(`P-value` < 5e-8) %>%
   filter(rsAminAmax %in% data$rsAminAmax)
+
+###
+table(data$MarkerName %in% ukb$chrposAminAmax)
+data$rs = ukb$ID[match(data$MarkerName, ukb$chrposAminAmax)]
+data$REF = ukb$ALLELE1[match(data$MarkerName, ukb$chrposAminAmax)]
+data$ALT = ukb$ALLELE0[match(data$MarkerName, ukb$chrposAminAmax)]
+data$Effect = data$Effect * 0.01
+data$StdErr = data$StdErr * 0.01
+write.table(data, sep="\t", quote=FALSE, row.names=FALSE, file=
+              "bleeding.t2e_1.tbl.HetDf1.ChrPos.rs.REFALT")
 
 ### from locus.R
 distance = 500 * 1000
@@ -87,6 +101,7 @@ snpstowindow = function(chr, pos, pow) {
 }
 
 x = snpstowindow(glgc$chr, glgc$pos, abs(glgc$Z))
+x$peak[x$chr==5 & x$peak==74625487] = 74651084 # HMGCR rs3846662:A:G instead of rs7703051:A:C
 glgc = glgc[
   match(paste0(x$chr, " ", x$peak), paste0(glgc$chr, " ", glgc$pos)), ]
 
@@ -99,23 +114,28 @@ ggplot() +
     aes(x = glgc2$ZMINOR,
         y = data2$ZMINOR),
     size = 0.75) +
+  geom_smooth(aes(x = glgc2$ZMINOR,
+                  y = data2$ZMINOR),
+              method = "lm") +
   scale_color_manual(values=c("black", "red")) +
   xlab("Effect on LDL (Z-score)") +
   ylab("Effect on LDL change by statin\n(Z-score)")
-  # ylab("Effect on log(LDL) change by statin\n(Z-score)")
+# ylab("Effect on log(LDL) change by statin\n(Z-score)")
 data2[data2$significant, ]
 glgc2[data2$significant, ]
+data2[data2$rsAminAmax == "rs3846662:A:G", ]
+glgc2[glgc2$rsAminAmax == "rs3846662:A:G", ]
 
 ### Manhattan
 output = 
   # "C10AA.delta.tiff"
-  "C10AA.logratio.100x.tiff"
+  # "C10AA.logratio.100x.tiff"
   # "C10AA.myboxcoxv2.100x.tiff"
   # "C03.myboxcoxv2.100x.tiff"
   # "C07.myboxcoxv2.100x.tiff"
   # "C08.myboxcoxv2.100x.tiff"
   # "C09.myboxcoxv2.100x.tiff"
-  
+  "bleeding.t2e.tiff"
 x = match(data$rsAminAmax, ukb$rsAminAmax)
 data$CHROM = ukb$CHROM[x]
 data$GENPOS = ukb$GENPOS[x]
